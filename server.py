@@ -380,32 +380,216 @@ def _cookies_to_netscape(cookie_list: list, path: str):
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-async def _get_douyin_fast(url: str) -> dict:
-    """取得抖音影片 CDN（嘗試 snaptik + yt-dlp，各 6 秒快速失敗）"""
-    # ── 方法 1：tikwm.com（還活著的第三方 API）──────────────────
+async def _get_douyin_from_page(url: str) -> dict:
+    """
+    直接解析抖音页面 HTML 中的嵌入式影片资料（最新、最可靠的方式）。
+    抖音 SSR 会把影片资讯嵌入在 <script> 标签中，不需要 a_bogus、不需要 cookies。
+    """
     try:
-        await asyncio.sleep(0.6)
-        async with httpx.AsyncClient(timeout=4, follow_redirects=True) as client:
-            r = await client.post("https://tikwm.com/api/",
-                data={"url": url, "hd": "1"},
-                headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"})
-            d = r.json()
-            if d.get("code") == 0 and d.get("data"):
-                dat = d["data"]
-                cdn = dat.get("hdplay") or dat.get("play") or ""
-                if cdn:
-                    return {"title": dat.get("title", "抖音影片"), "thumbnail": dat.get("origin_cover") or dat.get("cover", ""),
-                            "duration": dat.get("duration", 0), "uploader": (dat.get("author") or {}).get("nickname", ""),
-                            "cdn_url": cdn, "cdn_audio_url": ""}
-    except Exception as e:
-        print(f"[douyin_fast/tikwm] {e}")
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as c:
+            r = await c.get(url, headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml"})
+            html = r.text
 
-    # ── 方法 2：yt-dlp（用基本 anonymous cookies）────────────────
+        def _find_video(obj, depth=0):
+            if depth > 10:
+                return None
+            if isinstance(obj, dict):
+                if "aweme_id" in obj and "video" in obj:
+                    return obj
+                for v in obj.values():
+                    r2 = _find_video(v, depth + 1)
+                    if r2:
+                        return r2
+            elif isinstance(obj, list):
+                for v in obj:
+                    r2 = _find_video(v, depth + 1)
+                    if r2:
+                        return r2
+            return None
+
+        # 方法 A：RENDER_DATA（抖音最新版 SSR 嵌入方式）
+        m = re.search(r'<script[^>]*id=["' + "'" + r']RENDER_DATA["' + "'" + r'][^>]*type=["' + "'" + r']application/json["' + "'" + r'][^>]*>([^<]+)</script>', html)
+        if m:
+            import json, urllib.parse
+            raw = m.group(1)
+            decoded = urllib.parse.unquote(raw)
+            data = json.loads(decoded)
+            ad = _find_video(data)
+            if ad and ad.get("video"):
+                video = ad["video"]
+                play_addr = video.get("play_addr", {})
+                url_list = play_addr.get("url_list", [])
+                if url_list:
+                    cdn = url_list[0].replace("playwm", "play")
+                    return {
+                        "title": (ad.get("desc") or "抖音影片")[:80],
+                        "thumbnail": video.get("cover", {}).get("url_list", [""])[0] if video.get("cover") else "",
+                        "duration": ad.get("duration", 0) // 1000 if ad.get("duration", 0) > 1000 else ad.get("duration", 0),
+                        "uploader": ad.get("author", {}).get("nickname", "") if ad.get("author") else "",
+                        "cdn_url": cdn,
+                        "cdn_audio_url": "",
+                    }
+
+        # 方法 B：window._ROUTES_DATA（旧版 SSR 嵌入）
+        m = re.search(r'window\._ROUTES_DATA\s*=\s*(\{.+?\});', html, re.DOTALL)
+        if m:
+            import json
+            raw = m.group(1)
+            data = json.loads(raw)
+            ad = _find_video(data)
+            if ad and ad.get("video"):
+                video = ad["video"]
+                url_list = video.get("play_addr", {}).get("url_list", [])
+                if url_list:
+                    cdn = url_list[0].replace("playwm", "play")
+                    return {
+                        "title": (ad.get("desc") or "抖音影片")[:80],
+                        "thumbnail": video.get("cover", {}).get("url_list", [""])[0] if video.get("cover") else "",
+                        "duration": ad.get("duration", 0) // 1000 if ad.get("duration", 0) > 1000 else ad.get("duration", 0),
+                        "uploader": ad.get("author", {}).get("nickname", "") if ad.get("author") else "",
+                        "cdn_url": cdn,
+                        "cdn_audio_url": "",
+                    }
+
+        # 方法 C：直接从 HTML 中正则抓取 mp4 URL
+        title_m = re.search(r'<meta[^>]+property=["' + "'" + r']og:title["' + "'" + r'][^>]+content=["' + "'" + r']([^"' + "'" + r']+)', html)
+        image_m = re.search(r'<meta[^>]+property=["' + "'" + r']og:image["' + "'" + r'][^>]+content=["' + "'" + r']([^"' + "'" + r']+)', html)
+        video_urls = re.findall(r'https?://[^\s"' + "'" + r'<>]+?\.(?:mp4|m3u8)[^\s"' + "'" + r'<>]*', html)
+        clean_urls = [u for u in video_urls if "watermark" not in u and "wm=" not in u and "playwm" not in u]
+        if clean_urls:
+            return {
+                "title": (title_m.group(1) if title_m else "抖音影片")[:80],
+                "thumbnail": image_m.group(1) if image_m else "",
+                "duration": 0,
+                "uploader": "",
+                "cdn_url": clean_urls[0],
+                "cdn_audio_url": "",
+            }
+
+    except Exception as e:
+        print(f"[douyin_fast/page_parse] {e}")
+    return {}
+
+
+async def _get_douyin_via_thirdparty(url: str) -> dict:
+    """并行呼叫多个第三方 API 取得抖音影片"""
+    APIS = [
+        {
+            "name": "tikwm",
+            "method": "POST",
+            "url": "https://tikwm.com/api/",
+            "data": {"url": url, "hd": "1"},
+            "headers": {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"},
+        },
+        {
+            "name": "douyin.wtf",
+            "method": "GET",
+            "url": "https://api.douyin.wtf/api",
+            "data": {"url": url, "minimal": "false"},
+            "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        },
+    ]
+
+    async def _try_one(api: dict) -> dict | None:
+        try:
+            async with httpx.AsyncClient(timeout=6, follow_redirects=True) as client:
+                if api["method"] == "POST":
+                    r = await client.post(api["url"], data=api.get("data"), headers=api.get("headers", {}))
+                else:
+                    r = await client.get(api["url"], params=api.get("data"), headers=api.get("headers", {}))
+                d = r.json()
+                if api["name"] == "tikwm":
+                    if d.get("code") == 0 and d.get("data"):
+                        dat = d["data"]
+                        cdn = dat.get("hdplay") or dat.get("play") or ""
+                        if cdn:
+                            return {
+                                "title": dat.get("title", "抖音影片")[:80],
+                                "thumbnail": dat.get("origin_cover") or dat.get("cover", ""),
+                                "duration": dat.get("duration", 0),
+                                "uploader": (dat.get("author") or {}).get("nickname", ""),
+                                "cdn_url": cdn,
+                                "cdn_audio_url": "",
+                            }
+                elif api["name"] == "douyin.wtf":
+                    vd = d.get("video_data") or []
+                    if vd:
+                        item = vd[0]
+                        cdn = item.get("video_url_hd") or item.get("video_url") or item.get("wm_video_url") or ""
+                        if "watermark" in cdn or "wm=" in cdn:
+                            cdn2 = item.get("video_url") or item.get("video_url_hd") or ""
+                            if cdn2 and "watermark" not in cdn2:
+                                cdn = cdn2
+                        if cdn:
+                            return {
+                                "title": (item.get("title") or item.get("desc") or "抖音影片")[:80],
+                                "thumbnail": item.get("cover") or "",
+                                "duration": item.get("duration", 0) or 0,
+                                "uploader": (item.get("author") or {}).get("nickname", "") if isinstance(item.get("author"), dict) else (item.get("author") or ""),
+                                "cdn_url": cdn,
+                                "cdn_audio_url": item.get("music_url") or "",
+                            }
+        except Exception as e:
+            print(f"[douyin_fast/3rd/{api['name']}] {e}")
+        return None
+
+    tasks = [asyncio.create_task(_try_one(api)) for api in APIS]
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED, timeout=8)
+    for t in done:
+        result = t.result()
+        if result:
+            for p in pending:
+                p.cancel()
+            return result
+    for p in pending:
+        p.cancel()
+    for t in tasks:
+        try:
+            result = await asyncio.wait_for(t, timeout=2)
+            if result:
+                return result
+        except:
+            pass
+    return {}
+
+
+async def _get_douyin_fast(url: str) -> dict:
+    """
+    取得抖音影片 CDN（并行执行所有方法，谁先成功用谁）。
+    策略：
+      1. 页面 HTML 解析（最新 SSR 嵌入资料，最快最可靠）
+      2. 第三方 API（tikwm.com / douyin.wtf 并行）
+      3. yt-dlp
+      4. a_bogus API（保留但放最后，非必要不装）
+    """
+    # Phase 1: 先跑最快的两个方法（页面解析 + 第三方 API）
+    tasks = {
+        "page": asyncio.create_task(_get_douyin_from_page(url)),
+        "api":  asyncio.create_task(_get_douyin_via_thirdparty(url)),
+    }
+    done, pending = await asyncio.wait(
+        [tasks["page"], tasks["api"]],
+        return_when=asyncio.FIRST_COMPLETED,
+        timeout=12
+    )
+    for t in done:
+        try:
+            r = t.result()
+            if r and r.get("cdn_url"):
+                for p in pending:
+                    p.cancel()
+                return r
+        except:
+            pass
+
+    # Phase 2: 如果上面失败，取消 pending 改跑 yt-dlp
+    for p in pending:
+        p.cancel()
     try:
         loop_dy = asyncio.get_event_loop()
         def _dy_ytdlp():
             import tempfile, os
-            # 建立臨時 cookie file（anonymous buvid3）
             ck = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
             ck.write("# Netscape HTTP Cookie File\n")
             ck.write(".douyin.com\tTRUE\t/\tTRUE\t0\tbuvid3\tlocal-12345678\n")
@@ -420,7 +604,6 @@ async def _get_douyin_fast(url: str) -> dict:
                     info = ydl.extract_info(url, download=False)
                     if not info:
                         return {}
-                    # 嘗試從多個欄位取得影片直連 URL
                     cdn = info.get("url") or ""
                     if not cdn:
                         rfs = info.get("requested_formats") or []
@@ -444,40 +627,39 @@ async def _get_douyin_fast(url: str) -> dict:
             finally:
                 try: os.unlink(ck.name)
                 except: pass
-        info = await asyncio.wait_for(loop_dy.run_in_executor(executor, _dy_ytdlp), timeout=8)
-        if info and info.get("cdn_url"):
-            return info
+        yt_result = await asyncio.wait_for(loop_dy.run_in_executor(executor, _dy_ytdlp), timeout=8)
+        if yt_result and yt_result.get("cdn_url"):
+            return yt_result
     except Exception as e:
         print(f"[douyin_fast/ytdlp] {e}")
 
-    # ── 方法 3：a_bogus API + 公開 cookies ────────────
+    # Phase 3: a_bogus（最后手段，因算法可能过时）
     try:
         aweme_id = _parse_aweme_id(url)
         if aweme_id:
             from crawlers.douyin.web.abogus import ABogus
             from urllib.parse import urlencode as _ue, quote as _q
-            import re
-            # 新鮮 session cookies
             async with httpx.AsyncClient(timeout=5) as c:
-                r = await c.get("https://www.douyin.com/", headers={"User-Agent": "Mozilla/5.0"})
+                r = await c.get("https://www.douyin.com/",
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
                 fresh = dict(r.cookies)
-            cookie_str = "__ac_nonce=067d687ac00d70af16eab; __ac_signature=_02B4Z6wo00f018O6kmgAAIDAR1H8JrcivBPDi5bAAJdBcf; ttwid=1%7C46sVJ6G5zO0ZRKBqbFef2B13U3CqP9gLwQEH8IV2y6A%7C1742112685%7Cae649397cca7dde21884d5f8e3e3d53eb2361aa64af04cd6889fa71d7f23344b"
-            for k, v in fresh.items():
-                old = re.search(f'{k}=[^;]+', cookie_str)
-                cookie_str = cookie_str.replace(old.group(), f'{k}={v}') if old else cookie_str + f'; {k}={v}'
+            cookie_parts = [f"{k}={v}" for k, v in fresh.items()]
+            cookie_str = "; ".join(cookie_parts)
+            if "ttwid" not in fresh:
+                return {}
             params = {"aweme_id": aweme_id, "msToken": ""}
-            ua = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36"
+            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             a_bogus = _q(ABogus().get_value(params), safe='')
             api_url = f"https://www.douyin.com/aweme/v1/web/aweme/detail/?{_ue(params)}&a_bogus={a_bogus}"
             async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(api_url, headers={"User-Agent": ua, "Referer": "https://www.douyin.com/", "Cookie": cookie_str})
+                resp = await client.get(api_url,
+                    headers={"User-Agent": ua, "Referer": "https://www.douyin.com/", "Cookie": cookie_str})
                 if resp.status_code == 200:
                     data = resp.json()
                     if "aweme_detail" in data and data["aweme_detail"]:
                         ad = data["aweme_detail"]
                         video = ad.get("video", {})
-                        play_addr = video.get("play_addr", {})
-                        url_list = play_addr.get("url_list", [])
+                        url_list = video.get("play_addr", {}).get("url_list", [])
                         if url_list:
                             cdn = url_list[0].replace("playwm", "play")
                             return {
@@ -492,9 +674,7 @@ async def _get_douyin_fast(url: str) -> dict:
         print("[douyin_fast/abogus] crawler not available")
     except Exception as e:
         print(f"[douyin_fast/abogus] {e}")
-
     return {}
-
 async def _get_douyin_info_api(aweme_id: str) -> dict:
     import sys as _sys
     # 支援兩種路徑：本機 DOUYIN_LIB 或 Railway 上的專案內 crawlers/
