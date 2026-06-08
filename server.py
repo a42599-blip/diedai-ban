@@ -2177,6 +2177,10 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if "youtube.com" in real_url or "youtu.be" in real_url:
         yield {"type":"progress","pct":5,"msg":"正在下載 YouTube 影片（Android 客戶端）..."}
         safe_yt = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+    # ══ YouTube：用 yt-dlp Android 客戶端下載（比 Invidious 更穩定）═══
+    if "youtube.com" in real_url or "youtu.be" in real_url:
+        yield {"type":"progress","pct":5,"msg":"正在下載 YouTube 影片（Android 客戶端）..."}
+        safe_yt = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
         opts_yt = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_yt}.%(ext)s"),"quiet":True,"no_warnings":True,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
@@ -2192,11 +2196,6 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         return
 
     # ══ 其他平台（yt-dlp）════════════════════════════════════════
-    yield {"type":"progress","pct":2,"msg":"初始化下載..."}
-    safe = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-    _h = re.search(r'h(\d+)', quality)
-    if _h:
-        _hv = _h.group(1)
         _fmt = f"bestvideo[height<={_hv}][ext=mp4]+bestaudio[ext=m4a]/best[height<={_hv}][ext=mp4]/best[height<={_hv}]"
     else:
         _fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
