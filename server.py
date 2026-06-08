@@ -2202,11 +2202,12 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         return
 
     # ══ X (Twitter)：用 yt-dlp 下載（跳過 CDN 直連）═══════════════════
-    _IS_X = "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url
+    _IS_X = "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url or "media.twitter" in real_url
     if _IS_X:
         yield {"type":"progress","pct":5,"msg":"正在下載 X 影片..."}
         safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_x = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        # iOS 主相簿只吃 H.264，強制全部 fallback 都要 avc1
+        opts_x = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[vcodec^=avc1]",
                    "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
                    "concurrent_fragment_downloads":8,"updatetime":False,"embedmetadata":True,
@@ -2222,7 +2223,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         return
 
     # ══ 通用快速路徑：有 hint_cdn 時直接 httpx 下載（但跳過 YouTube/Twitter，讓 yt-dlp 處理 H.264）══
-    if hint_cdn and not ("youtube.com" in real_url or "youtu.be" in real_url or "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url):
+    if hint_cdn and not ("youtube.com" in real_url or "youtu.be" in real_url or "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url or "media.twitter" in real_url):
         yield {"type":"progress","pct":5,"msg":"下載影片..."}
         safe = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
         gen_h = {
