@@ -2173,10 +2173,6 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             return
         yield {"type":"progress","pct":2,"msg":"CDN URL 已過期，改用 yt-dlp 重新下載..."}
 
-    # ══ YouTube：用 yt-dlp Android 客戶端下載（比 Invidious 更穩定）═══
-    if "youtube.com" in real_url or "youtu.be" in real_url:
-        yield {"type":"progress","pct":5,"msg":"正在下載 YouTube 影片（Android 客戶端）..."}
-        safe_yt = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
 
     # ══ YouTube：用 yt-dlp Android 客戶端下載（比 Invidious 更穩定）═══
     if "youtube.com" in real_url or "youtu.be" in real_url:
