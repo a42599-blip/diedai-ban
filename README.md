@@ -39,7 +39,7 @@
 | **下載引擎** | yt-dlp（不鎖版本）+ ffmpeg |
 | **JS Runtime** | Deno（YouTube 解析必要） |
 | **Docker 基礎** | python:3.12-slim |
-| **CPU / RAM** | 8 vCPU / 1 GB（Railway Starter） |
+| **CPU / RAM** | 8 vCPU / 2 GB（Railway Starter，已調升） |
 | **費用** | Railway $5/月（可能多專案共用 Starter 額度） |
 | **域名** | v8i8.com（Cloudflare 購買，$10.44/年） |
 | **Worker** | aa-proxy（Cloudflare，$0） |
@@ -114,4 +114,4 @@ v9-revert-front   = e1898ee  還原前端
 1. YouTube / Instagram / X(Twitter) iOS 下載到最近儲存（非主相簿）
 2. 抖音 `core_dep` 限制（抖音端限制部分影片）
 3. 微博部分影片需登入才能看
-4. Railway 1GB RAM：Playwright + yt-dlp 同時跑可能 OOM
+4. Railway RAM 已調到 2GB，Playwright 可用但非必要
