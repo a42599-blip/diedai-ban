@@ -13,16 +13,16 @@
 | 抖音 Douyin | ✅ | ✅ | a_bogus + ttwid |
 | TikTok | ✅ | ✅ | tikwm API |
 | B站 Bilibili | ✅ | ✅ | 直打 Bilibili API |
-| YouTube | ✅ | ✅ | yt-dlp Android 客戶端 |
 | 小紅書 | ✅ | ✅ | 直解 HTML |
 | 蝦皮 Shopee | ✅ | ✅ | HTML 解析 |
 | **Facebook** | ✅ | ✅ | `best[ext=mp4]/best` |
-| **Instagram** | ✅ | ✅ | `best[ext=mp4]/best` |
 | **微博 Weibo** | ✅ | ✅ | 專屬解析 + `best[ext=mp4]/best` |
 | 今日頭條 | ✅ | ✅ | 通用 yt-dlp |
 | 西瓜視頻 | ✅ | ✅ | 通用 yt-dlp |
-| **X (Twitter)** | ✅ | ⚠️ | iOS 下載到最近儲存 |
 | 快手 Kuaishou | ❌ 已移除 | ❌ | |
+| **YouTube** | ✅ | ✅ | yt-dlp Android 客戶端 ⚠️ iOS下載到最近儲存 |
+| **Instagram** | ✅ | ✅ | `best[ext=mp4]/best` ⚠️ iOS下載到最近儲存 |
+| **X (Twitter)** | ✅ | ✅ | 通用 yt-dlp ⚠️ iOS下載到最近儲存 |
 
 ---
 
