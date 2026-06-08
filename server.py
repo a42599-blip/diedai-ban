@@ -1333,6 +1333,48 @@ async def video_info(url: str):
             print(f"[weibo_parse] {wb_ex}")
         # fallthrough to yt-dlp
 
+    # ── Instagram：專屬解析（只加 parser，不加下載器）───────────
+    if "instagram.com" in real_url:
+        try:
+            ig_approaches = [
+                {"ua":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"},
+                {"ua":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            ]
+            from urllib.parse import quote as _qig
+            for ap in ig_approaches:
+                def _ig_parse(a=ap):
+                    ig_opts = {"quiet":True,"no_warnings":True,"skip_download":True,
+                               "http_headers":{"User-Agent":a["ua"]}}
+                    with yt_dlp.YoutubeDL(ig_opts) as ydl:
+                        return ydl.extract_info(real_url, download=False)
+                ig_info = await loop.run_in_executor(executor, _ig_parse)
+                if ig_info and (ig_info.get("url") or ig_info.get("formats")):
+                    ig_cdn = ig_info.get("url","") or ""
+                    if not ig_cdn:
+                        ig_fmts = ig_info.get("formats") or []
+                        for f in ig_fmts:
+                            if f.get("vcodec","none")!="none" and f.get("url"):
+                                ig_cdn = f["url"]
+                                break
+                    if ig_cdn:
+                        ig_result = {
+                            "title": ig_info.get("title","Instagram 影片"),
+                            "thumbnail": ig_info.get("thumbnail",""),
+                            "duration": ig_info.get("duration",0),
+                            "uploader": ig_info.get("uploader",""),
+                            "platform": "Instagram",
+                            "url": real_url,
+                            "has_video": True,
+                            "proxy_url": f"/api/proxy-video?url={_qig(ig_cdn,safe='')}&referer=https://www.instagram.com/",
+                            "cdn_url": ig_cdn,
+                            "cdn_audio_url": "",
+                            "formats": [{"id":"best","label":"原始畫質","height":0}],
+                        }
+                        return JSONResponse(ig_result)
+        except Exception:
+            pass
+        # fallthrough to yt-dlp
+
     def _info():
         from urllib.parse import urlparse as _up
         opts = {
