@@ -1296,40 +1296,65 @@ async def video_info(url: str):
         # Invidious 全失敗 → fallback yt-dlp Android
 
     # ── 微博 Weibo：專屬解析（Lux 在雲端不可用，用 yt-dlp）───────────
-    if "weibo.com" in real_url:
-        try:
-            from urllib.parse import quote as _qwb
-            def _wb_parse():
-                wb_opts = {"quiet":True,"no_warnings":True,"skip_download":True,
-                           "http_headers":{"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}}
-                with yt_dlp.YoutubeDL(wb_opts) as ydl:
-                    return ydl.extract_info(real_url, download=False)
-            wb_info = await loop.run_in_executor(executor, _wb_parse)
-            if wb_info:
-                wb_cdn = wb_info.get("url","") or ""
-                if not wb_cdn:
-                    wb_fmts = wb_info.get("formats") or []
-                    for f in wb_fmts:
-                        if f.get("vcodec","none")!="none" and f.get("url"):
-                            wb_cdn = f["url"]
-                            break
-                if wb_cdn or wb_info.get("title"):
-                    prx_wb = f"/api/proxy-video?url={_qwb(wb_cdn,safe='')}&referer=https://www.weibo.com/" if wb_cdn else ""
-                    return JSONResponse({
-                        "title": wb_info.get("title","微博影片"),
-                        "thumbnail": wb_info.get("thumbnail",""),
-                        "duration": wb_info.get("duration",0),
-                        "uploader": wb_info.get("uploader",""),
-                        "platform": "Weibo",
-                        "url": real_url,
-                        "has_video": bool(wb_cdn),
-                        "proxy_url": prx_wb,
-                        "cdn_url": wb_cdn,
-                        "cdn_audio_url": "",
-                        "formats": [{"id":"best","label":"原始畫質","height":0}],
-                    })
-        except Exception as wb_ex:
-            print(f"[weibo_parse] {wb_ex}")
+    _IS_WEIBO = "weibo.com" in real_url or "m.weibo.cn" in real_url or "video.weibo.com" in real_url
+    if _IS_WEIBO:
+        weibo_result = None
+        weibo_approaches = [
+            {"ua":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", "note":"mobile"},
+            {"ua":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "note":"desktop"},
+        ]
+        from urllib.parse import quote as _qwb
+        for approach in weibo_approaches:
+            try:
+                def _wb_parse(ap=approach):
+                    wb_opts = {"quiet":True,"no_warnings":True,"skip_download":True,
+                               "http_headers":{"User-Agent":ap["ua"]}}
+                    with yt_dlp.YoutubeDL(wb_opts) as ydl:
+                        return ydl.extract_info(real_url, download=False)
+                wb_info = await loop.run_in_executor(executor, _wb_parse)
+                if wb_info:
+                    wb_cdn = wb_info.get("url","") or ""
+                    if not wb_cdn:
+                        wb_fmts = wb_info.get("formats") or []
+                        for f in wb_fmts:
+                            if f.get("vcodec","none")!="none" and f.get("url"):
+                                wb_cdn = f["url"]
+                                break
+                    if wb_cdn:
+                        prx_wb = f"/api/proxy-video?url={_qwb(wb_cdn,safe='')}&referer=https://www.weibo.com/"
+                        weibo_result = {
+                            "title": wb_info.get("title","微博影片"),
+                            "thumbnail": wb_info.get("thumbnail",""),
+                            "duration": wb_info.get("duration",0),
+                            "uploader": wb_info.get("uploader",""),
+                            "platform": "Weibo",
+                            "url": real_url,
+                            "has_video": True,
+                            "proxy_url": prx_wb,
+                            "cdn_url": wb_cdn,
+                            "cdn_audio_url": "",
+                            "formats": [{"id":"best","label":"原始畫質","height":0}],
+                        }
+                        break
+                    elif wb_info.get("title"):
+                        # 有標題但沒 CDN（可能需要登入），先保留
+                        weibo_result = {
+                            "title": wb_info.get("title","微博影片"),
+                            "thumbnail": wb_info.get("thumbnail",""),
+                            "duration": wb_info.get("duration",0),
+                            "uploader": wb_info.get("uploader",""),
+                            "platform": "Weibo",
+                            "url": real_url,
+                            "has_video": False,
+                            "proxy_url": "","cdn_url": "","cdn_audio_url": "",
+                            "formats": [{"id":"best","label":"原始畫質","height":0}],
+                            "error_hint": "此微博影片可能需要登入或已失效，請在瀏覽器中打開確認",
+                        }
+            except Exception as wb_ex:
+                print(f"[weibo_parse/{approach['note']}] {wb_ex}")
+                continue
+        if weibo_result:
+            return JSONResponse(weibo_result)
         # fallthrough to yt-dlp
 
     # ── Instagram：專屬解析（改善穩定性）─────────────────────────
@@ -2181,9 +2206,11 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if _IS_X:
         yield {"type":"progress","pct":5,"msg":"正在下載 X 影片..."}
         safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_x = {"format":"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        opts_x = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
+                   "concurrent_fragment_downloads":8,"updatetime":False,"embedmetadata":True,
+                   "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
                    "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
