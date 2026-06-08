@@ -1273,6 +1273,7 @@ async def video_info(url: str):
         except Exception:
             pass
 
+
     # ── YouTube：優先走 Invidious（繞過雲端 IP 封鎖）─────────────
     if "youtube.com" in real_url or "youtu.be" in real_url:
         from urllib.parse import quote as _qyt
@@ -1294,7 +1295,6 @@ async def video_info(url: str):
                 "formats":   inv_data.get("formats",[]),
             })
         # Invidious 全失敗 → fallback yt-dlp Android
-
     # ── 微博 Weibo：專屬解析（timeout 8秒，避免卡住）─────────────
     if "weibo.com" in real_url or "m.weibo.cn" in real_url or "video.weibo.com" in real_url:
         try:
@@ -2177,6 +2177,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if "youtube.com" in real_url or "youtu.be" in real_url:
         yield {"type":"progress","pct":5,"msg":"正在下載 YouTube 影片（Android 客戶端）..."}
         safe_yt = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+
     # ══ YouTube：用 yt-dlp Android 客戶端下載（比 Invidious 更穩定）═══
     if "youtube.com" in real_url or "youtu.be" in real_url:
         yield {"type":"progress","pct":5,"msg":"正在下載 YouTube 影片（Android 客戶端）..."}
