@@ -2206,12 +2206,12 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if _IS_X:
         yield {"type":"progress","pct":5,"msg":"正在下載 X 影片..."}
         safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        # iOS 主相簿只吃 H.264，強制全部 fallback 都要 avc1
-        opts_x = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[vcodec^=avc1]",
+        # iOS 主相簿只吃 H.264 → 用 ffmpeg 重新編碼確保相容
+        opts_x = {"format":"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
                    "concurrent_fragment_downloads":8,"updatetime":False,"embedmetadata":True,
-                   "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
+                   "postprocessor_args":{"default":["-c:v","libx264","-preset","fast","-crf","23","-movflags","+faststart+fastskip"]},
                    "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
