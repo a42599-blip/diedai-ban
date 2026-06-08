@@ -2201,18 +2201,15 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             yield {"type":"error","message":"Instagram 下載失敗："+(err_ig[0] if err_ig else "未知錯誤")}
         return
 
-    # ══ X (Twitter)：用 yt-dlp 下載（跳過 CDN 直連）═══════════════════
+    # ══ X (Twitter)：仿 FB/IG 邏輯 — 最簡潔格式，不搞花樣 ════════
     _IS_X = "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url or "media.twitter" in real_url
     if _IS_X:
         yield {"type":"progress","pct":5,"msg":"正在下載 X 影片..."}
         safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        # iOS 主相簿只吃 H.264 → 用 ffmpeg 重新編碼確保相容
-        opts_x = {"format":"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        # 跟 FB/IG/小紅書 一模一樣：best[ext=mp4]/best，不多加東西
+        opts_x = {"format":"best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),
-                   "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
-                   "concurrent_fragment_downloads":8,"updatetime":False,"embedmetadata":True,
-                   "postprocessor_args":{"default":["-c:v","libx264","-preset","fast","-crf","23","-movflags","+faststart+fastskip"]},
-                   "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
+                   "quiet":True,"no_warnings":True,"merge_output_format":"mp4"}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
         if res_x and Path(res_x[0]).exists() and Path(res_x[0]).stat().st_size > 50000:
