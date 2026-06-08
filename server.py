@@ -2164,8 +2164,11 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if _IS_IG:
         yield {"type":"progress","pct":5,"msg":"正在下載 Instagram 影片..."}
         safe_ig = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_ig = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),
+        opts_ig = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                   "outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
+                   "concurrent_fragment_downloads":8,"updatetime":False,"embedmetadata":True,
+                   "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
                    "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
         res_ig, err_ig = [], []
         async for evt in ytdlp_dl(opts_ig, real_url, res_ig, err_ig): yield evt
