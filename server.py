@@ -1295,6 +1295,53 @@ async def video_info(url: str):
             })
         # Invidious 全失敗 → fallback yt-dlp Android
 
+    # ── Instagram：專屬解析（改善穩定性）─────────────────────────
+    if "instagram.com" in real_url:
+        ig_result = None
+        ig_approaches = [
+            {"format": "best", "headers": {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}},
+            {"format": "best", "headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}},
+        ]
+        from urllib.parse import quote as _qig
+        for approach in ig_approaches:
+            try:
+                def _ig_parse(ap=approach):
+                    ig_opts = {"quiet":True,"no_warnings":True,"skip_download":True,
+                               "http_headers":ap["headers"]}
+                    with yt_dlp.YoutubeDL(ig_opts) as ydl:
+                        return ydl.extract_info(real_url, download=False)
+                ig_info = await loop.run_in_executor(executor, _ig_parse)
+                if ig_info and (ig_info.get("url") or ig_info.get("formats")):
+                    ig_cdn = ig_info.get("url","") or ""
+                    if not ig_cdn:
+                        ig_fmts = ig_info.get("formats") or []
+                        for f in ig_fmts:
+                            if f.get("vcodec","none")!="none" and f.get("url"):
+                                ig_cdn = f["url"]
+                                break
+                    if ig_cdn:
+                        prx_ig = f"/api/proxy-video?url={_qig(ig_cdn,safe='')}&referer=https://www.instagram.com/"
+                        ig_result = {
+                            "title": ig_info.get("title","Instagram 影片"),
+                            "thumbnail": ig_info.get("thumbnail",""),
+                            "duration": ig_info.get("duration",0),
+                            "uploader": ig_info.get("uploader",""),
+                            "platform": "Instagram",
+                            "url": real_url,
+                            "has_video": True,
+                            "proxy_url": prx_ig,
+                            "cdn_url": ig_cdn,
+                            "cdn_audio_url": "",
+                            "formats": [{"id":"best","label":"原始畫質","height":0}],
+                        }
+                        break
+            except Exception as ig_ex:
+                print(f"[ig_parse] approach failed: {ig_ex}")
+                continue
+        if ig_result:
+            return JSONResponse(ig_result)
+        # 所有方式都失敗 → fallthrough 到 yt-dlp 通用
+
     def _info():
         from urllib.parse import urlparse as _up
         opts = {
@@ -2056,6 +2103,40 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             if not vids: yield {"type":"error","message":"Lux 下載失敗，無輸出檔案"}; return
             new_files = [vids[0]]
         yield {"type":"done","filename":new_files[0].name,"saved_dir":str(out_dir),"size_mb":round(new_files[0].stat().st_size/1024/1024,1)}
+        return
+
+    # ══ Facebook：用 yt-dlp 下載（跳過 CDN 直連，CDN URL 有時效性）════
+    _IS_FB = "facebook.com" in real_url or "fb.watch" in real_url or "fb.com" in real_url
+    if _IS_FB:
+        yield {"type":"progress","pct":5,"msg":"正在下載 Facebook 影片..."}
+        safe_fb = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+        opts_fb = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_fb}.%(ext)s"),
+                   "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
+                   "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
+        res_fb, err_fb = [], []
+        async for evt in ytdlp_dl(opts_fb, real_url, res_fb, err_fb): yield evt
+        if res_fb and Path(res_fb[0]).exists() and Path(res_fb[0]).stat().st_size > 50000:
+            sz = round(Path(res_fb[0]).stat().st_size/1024/1024, 1)
+            yield {"type":"done","filename":Path(res_fb[0]).name,"saved_dir":str(out_dir),"size_mb":sz}
+        else:
+            yield {"type":"error","message":"Facebook 下載失敗："+(err_fb[0] if err_fb else "未知錯誤")}
+        return
+
+    # ══ Instagram：用 yt-dlp 下載（跳過 CDN 直連）════════════════════
+    _IS_IG = "instagram.com" in real_url
+    if _IS_IG:
+        yield {"type":"progress","pct":5,"msg":"正在下載 Instagram 影片..."}
+        safe_ig = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+        opts_ig = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),
+                   "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
+                   "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
+        res_ig, err_ig = [], []
+        async for evt in ytdlp_dl(opts_ig, real_url, res_ig, err_ig): yield evt
+        if res_ig and Path(res_ig[0]).exists() and Path(res_ig[0]).stat().st_size > 50000:
+            sz = round(Path(res_ig[0]).stat().st_size/1024/1024, 1)
+            yield {"type":"done","filename":Path(res_ig[0]).name,"saved_dir":str(out_dir),"size_mb":sz}
+        else:
+            yield {"type":"error","message":"Instagram 下載失敗："+(err_ig[0] if err_ig else "未知錯誤")}
         return
 
     # ══ 通用快速路徑：有 hint_cdn 時直接 httpx 下載（但跳過 YouTube，讓 yt-dlp 處理 H.264）══
