@@ -1,38 +1,56 @@
-# 🎬 去水印下載工具 — 迭代開發版
+# aa.v8i8.com — 去水印下載工具（迭代開發版）
 
-> ⚠️ **此為迭代開發版，非 production**
-> 
-> **Production 網址：** https://v8i8.com（🔒 保底，不可動）
-> **迭代版網址：** https://aa.v8i8.com（🟡 開發測試用）
-
-🌐 **立即使用（迭代版）：** [aa.v8i8.com](https://aa.v8i8.com)
-🌐 **正式版：** [v8i8.com](https://v8i8.com)
+> **當前版本：`d7c52ee`**（2026-06-08）
+>
+> 🚫 主站 `v8i8.com` 不動，所有修改先在這裡測試
 
 ---
 
-## 功能特色
+## 支援平台（13個）
 
-- ✅ **6 大平台解析** — 抖音、YouTube、TikTok、B站、小紅書、蝦皮
-- ✅ **解析紀錄** — 自動保存最近 50 筆（localStorage）
-- ✅ **三國語言** — 繁體中文、简体中文、English
-- ✅ **並行處理** — 抖音三種方式同時跑
-- ✅ **剪貼簿自動貼上**
+| 平台 | 解析 | 下載 | 備註 |
+|:----|:----:|:----:|:------|
+| 抖音 Douyin | ✅ | ✅ | a_bogus + ttwid |
+| TikTok | ✅ | ✅ | tikwm API |
+| B站 Bilibili | ✅ | ✅ | 直打 Bilibili API |
+| YouTube | ✅ | ✅ | yt-dlp Android 客戶端 |
+| 小紅書 | ✅ | ✅ | 直解 HTML |
+| 蝦皮 Shopee | ✅ | ✅ | HTML 解析 |
+| **Facebook** | ✅ | ✅ | `best[ext=mp4]/best` |
+| **Instagram** | ✅ | ✅ | `best[ext=mp4]/best` |
+| **微博 Weibo** | ✅ | ✅ | 專屬解析 + `best[ext=mp4]/best` |
+| 今日頭條 | ✅ | ✅ | 通用 yt-dlp |
+| 西瓜視頻 | ✅ | ✅ | 通用 yt-dlp |
+| **X (Twitter)** | ✅ | ⚠️ | iOS 下載到最近儲存 |
+| 快手 Kuaishou | ❌ 已移除 | ❌ | |
 
-## 與 production 的關係
+---
+
+## 部署
+
+```bash
+git push origin master
+# Railway 自動部署到 aa.v8i8.com
+```
+
+## 滾回
+
+```bash
+git reset --hard <版本號>
+git push origin master --force
+# 然後觸發 Railway 部署
+```
+
+## 版本標籤
 
 ```
-diedai-ban（迭代版 🟡）    →     video-downloader（production 🟢）
-    │                                      │
-    ├── 所有修改先在這裡測                   ├── 保底版本，不可直接修改
-    ├── 測試完成後合併回 production           ├── 最終穩定版：6847de2
-    └── GitHub: a42599-blip/diedai-ban       └── GitHub: a42599-blip/video-downloader
+v1-origin         = 9e4dbbe  原始版
+v2-badges-fb-fix  = 7bc765f  +FB/IG徽章+下載
+v3-weibo-x-ios    = e0c715c  +微博+X iOS
+v4-x-backend      = cbcbe2e  +X後端
+v5-x-yt-format    = 7ea94aa  X改YT格式
+v6-x-h264         = 23ea59a  X強制H.264
+v7-x-ffmpeg       = c42da1c  X ffmpeg
+v8-x-simple       = 381cb43  X best格式
+v9-revert-front   = e1898ee  還原前端
 ```
-
-## 當前版本
-
-| 項目 | 內容 |
-|:----|:------|
-| 目前版本 | commit `6847de2`（與 production 相同） |
-| 建立日期 | 2026-06-06 |
-| 狀態 | ✅ 線上，可用於開發測試 |
-| 部署方式 | push master → Railway 自動部署 |
