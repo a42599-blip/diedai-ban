@@ -1295,16 +1295,17 @@ async def video_info(url: str):
             })
         # Invidious 全失敗 → fallback yt-dlp Android
 
-    # ── 微博 Weibo：專屬解析 ──────────────────────────────────
+    # ── 微博 Weibo：專屬解析（timeout 8秒，避免卡住）─────────────
     if "weibo.com" in real_url or "m.weibo.cn" in real_url or "video.weibo.com" in real_url:
         try:
             from urllib.parse import quote as _qwb
             def _wb_parse():
                 wb_opts = {"quiet":True,"no_warnings":True,"skip_download":True,
+                           "socket_timeout":8,
                            "http_headers":{"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}}
                 with yt_dlp.YoutubeDL(wb_opts) as ydl:
                     return ydl.extract_info(real_url, download=False)
-            wb_info = await loop.run_in_executor(executor, _wb_parse)
+            wb_info = await asyncio.wait_for(loop.run_in_executor(executor, _wb_parse), timeout=10)
             if wb_info:
                 wb_cdn = wb_info.get("url","") or ""
                 if not wb_cdn:
