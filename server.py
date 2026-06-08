@@ -2113,6 +2113,22 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             yield {"type":"error","message":"Facebook 下載失敗："+(err_fb[0] if err_fb else "未知錯誤")}
         return
 
+    # ══ Instagram：用 yt-dlp 下載（仿 FB 邏輯）════════════════════
+    _IS_IG = "instagram.com" in real_url
+    if _IS_IG:
+        yield {"type":"progress","pct":5,"msg":"正在下載 Instagram 影片..."}
+        safe_ig = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+        opts_ig = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),
+                   "quiet":True,"no_warnings":True,"merge_output_format":"mp4"}
+        res_ig, err_ig = [], []
+        async for evt in ytdlp_dl(opts_ig, real_url, res_ig, err_ig): yield evt
+        if res_ig and Path(res_ig[0]).exists() and Path(res_ig[0]).stat().st_size > 50000:
+            sz = round(Path(res_ig[0]).stat().st_size/1024/1024, 1)
+            yield {"type":"done","filename":Path(res_ig[0]).name,"saved_dir":str(out_dir),"size_mb":sz}
+        else:
+            yield {"type":"error","message":"Instagram 下載失敗："+(err_ig[0] if err_ig else "未知錯誤")}
+        return
+
     # ══ 微博 Weibo：用 yt-dlp 下載（仿 IG 邏輯）═════════════════════
     _IS_WB = "weibo.com" in real_url or "m.weibo.cn" in real_url or "video.weibo.com" in real_url
     if _IS_WB:
