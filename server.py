@@ -1295,6 +1295,43 @@ async def video_info(url: str):
             })
         # Invidious 全失敗 → fallback yt-dlp Android
 
+    # ── 微博 Weibo：專屬解析（Lux 在雲端不可用，用 yt-dlp）───────────
+    if "weibo.com" in real_url:
+        try:
+            from urllib.parse import quote as _qwb
+            def _wb_parse():
+                wb_opts = {"quiet":True,"no_warnings":True,"skip_download":True,
+                           "http_headers":{"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}}
+                with yt_dlp.YoutubeDL(wb_opts) as ydl:
+                    return ydl.extract_info(real_url, download=False)
+            wb_info = await loop.run_in_executor(executor, _wb_parse)
+            if wb_info:
+                wb_cdn = wb_info.get("url","") or ""
+                if not wb_cdn:
+                    wb_fmts = wb_info.get("formats") or []
+                    for f in wb_fmts:
+                        if f.get("vcodec","none")!="none" and f.get("url"):
+                            wb_cdn = f["url"]
+                            break
+                if wb_cdn or wb_info.get("title"):
+                    prx_wb = f"/api/proxy-video?url={_qwb(wb_cdn,safe='')}&referer=https://www.weibo.com/" if wb_cdn else ""
+                    return JSONResponse({
+                        "title": wb_info.get("title","微博影片"),
+                        "thumbnail": wb_info.get("thumbnail",""),
+                        "duration": wb_info.get("duration",0),
+                        "uploader": wb_info.get("uploader",""),
+                        "platform": "Weibo",
+                        "url": real_url,
+                        "has_video": bool(wb_cdn),
+                        "proxy_url": prx_wb,
+                        "cdn_url": wb_cdn,
+                        "cdn_audio_url": "",
+                        "formats": [{"id":"best","label":"原始畫質","height":0}],
+                    })
+        except Exception as wb_ex:
+            print(f"[weibo_parse] {wb_ex}")
+        # fallthrough to yt-dlp
+
     # ── Instagram：專屬解析（改善穩定性）─────────────────────────
     if "instagram.com" in real_url:
         ig_result = None

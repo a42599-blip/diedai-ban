@@ -782,7 +782,8 @@ async function dlUrl(){
     if(fmt&&fmt.url) cdnUrl=fmt.url;
   }
   const _isXHS=(urlInfo.url||'').includes('xiaohongshu.com')||(urlInfo.url||'').includes('xhslink.com');
-  if(isMobile() && cdnUrl && !cdnAudioUrl && !_isXHS){
+  const _isTwitter=(urlInfo.url||'').includes('twitter.com')||(urlInfo.url||'').includes('x.com')||(urlInfo.url||'').includes('t.co');
+  if(isMobile() && cdnUrl && !cdnAudioUrl && !_isXHS && !_isTwitter){
     const origin=(()=>{ try{ return new URL(urlInfo.url).origin; }catch(e){ return ''; } })();
     const q=new URLSearchParams({url:cdnUrl,title:urlInfo.title||'影片',referer:origin});
     const fname=(urlInfo.title||'影片').replace(/[/:*?"<>|]/g,'_').slice(0,60)+'.mp4';
