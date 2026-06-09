@@ -22,7 +22,7 @@
 | 7 | **微博 Weibo** | ✅ | ✅ | 專屬解析器 + `best[ext=mp4]/best` | ✅ |
 | 8 | **今日頭條** | ✅ | ✅ | 通用 yt-dlp | ✅ |
 | 9 | **西瓜視頻** | ✅ | ✅ | 通用 yt-dlp | ✅ |
-| 10 | **YouTube** | ✅ | ✅ | yt-dlp Android + H.264 | ⚠️ iOS到最近儲存 |
+| 10 | **YouTube** | ✅ | ✅ | yt-dlp Android + `[vcodec^=avc1]` H.264 + 公開cookies + Deno | ⚠️ iOS到最近儲存 |
 | 11 | **Instagram** | ✅ | ✅ | 專屬 `best[ext=mp4]/best` | ⚠️ iOS到最近儲存 |
 | 12 | **X (Twitter)** | ✅ | ✅ | 通用 yt-dlp | ⚠️ iOS到最近儲存 |
 | 13 | 快手 Kuaishou | ❌ 已移除 | ❌ | — | ❌ |
