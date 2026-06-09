@@ -2312,8 +2312,33 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
         if err_x: yield {"type":"error","message":err_x[0]}; return
         if res_x:
-            sz_x = round(Path(res_x[0]).stat().st_size/1024/1024,1) if Path(res_x[0]).exists() else 0
-            yield {"type":"done","filename":Path(res_x[0]).name,"saved_dir":str(out_dir),"size_mb":sz_x}
+            _fp_x = Path(res_x[0])
+            if _fp_x.exists():
+                # 用 ffmpeg 重設影片內部時間戳記為現在（iOS 相簿排序用）
+                try:
+                    import subprocess as _sp_x
+                    _now_x = __import__('datetime').datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                    _tmp_x = _fp_x.with_suffix('.tmp.mp4')
+                    _sp_x.run(["ffmpeg", "-i", str(_fp_x),
+                        "-map", "0", "-c", "copy",
+                        "-metadata", f"creation_time={_now_x}",
+                        "-metadata:s:v", f"creation_time={_now_x}",
+                        "-metadata:s:a", f"creation_time={_now_x}",
+                        "-y", str(_tmp_x)],
+                        capture_output=True, timeout=30)
+                    if _tmp_x.exists() and _tmp_x.stat().st_size > 50000:
+                        _fp_x.unlink()
+                        _tmp_x.rename(_fp_x)
+                except Exception as _ff_x:
+                    print(f"[x_fix_time] {_ff_x}")
+                # 也改檔案系統時間
+                try:
+                    import os as _os_x
+                    _os_x.utime(_fp_x, None)
+                except:
+                    pass
+            sz_x = round(_fp_x.stat().st_size/1024/1024,1) if _fp_x.exists() else 0
+            yield {"type":"done","filename":_fp_x.name,"saved_dir":str(out_dir),"size_mb":sz_x}
         else:
             yield {"type":"error","message":"下載失敗，無輸出檔案"}
         return
