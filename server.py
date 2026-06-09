@@ -268,10 +268,10 @@ async def _get_bilibili_direct(url: str) -> dict:
             # 拿不到直連 → 用 Playwright 瀏覽器模擬
             if not _cdn_url:
                 try:
-                from playwright.async_api import async_playwright as _pw
-                async with _pw() as _p:
-                    _b = await _p.chromium.launch(headless=True,
-                        args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
+                    from playwright.async_api import async_playwright as _pw
+                    async with _pw() as _p:
+                        _b = await _p.chromium.launch(headless=True,
+                            args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
                     _ctx = await _b.new_context(
                         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
                         locale="zh-CN")
@@ -305,8 +305,8 @@ async def _get_bilibili_direct(url: str) -> dict:
                     if _pw_cdn["url"] and not _pw_cdn["url"].startswith("blob:"):
                         _cdn_url = _pw_cdn["url"]
                     await _b.close()
-            except Exception as _pw_ex:
-                print(f"[bilibili_pw] {_pw_ex}")
+                except Exception as _pw_ex:
+                    print(f"[bilibili_pw] {_pw_ex}")
 
             if _cdn_url:
                 return {"title": title, "thumbnail": thumb, "duration": dur,
