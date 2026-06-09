@@ -153,7 +153,36 @@ _BILI_HEADERS = {
 _BILI_COOKIE = "buvid3=local-12345678; b_nut=1700000000; b_lsid=ABC123;"
 
 import uuid as _uuid
+import hashlib as _hashlib
 _BILI_HEADERS_WITH_COOKIE = {**_BILI_HEADERS, "Cookie": _BILI_COOKIE + f" buvid4={_uuid.uuid4().hex[:16]};"}
+
+# ── B站 WBI 簽名 ─────────────────────────────────────────
+_WBI_ENC_TAB = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52]
+_wbi_cache = {"key": "ea1db124af3c7062474693fa704f4ff8", "ts": 0.0}
+
+async def _bili_wbi_key(client):
+    if _wbi_cache["key"] and (time.time() - _wbi_cache["ts"]) < 1800:
+        return _wbi_cache["key"]
+    try:
+        r = await client.get("https://api.bilibili.com/x/web-interface/nav", timeout=8)
+        d = r.json()["data"]["wbi_img"]
+        raw = d["img_url"].rsplit("/", 1)[-1].split(".")[0] + d["sub_url"].rsplit("/", 1)[-1].split(".")[0]
+        from functools import reduce
+        key = reduce(lambda s, i: s + raw[i], _WBI_ENC_TAB, "")[:32]
+        _wbi_cache["key"] = key
+        _wbi_cache["ts"] = time.time()
+        return key
+    except Exception:
+        return _wbi_cache["key"]
+
+def _bili_wbi_sign(params, mixin_key):
+    from urllib.parse import quote
+    SAFE = "!'()*"
+    p = dict(params)
+    p["wts"] = int(time.time())
+    q = "&".join(k + "=" + quote(str(v), safe=SAFE) for k, v in sorted(p.items()))
+    p["w_rid"] = _hashlib.md5((q + mixin_key).encode()).hexdigest()
+    return p
 
 async def _get_bilibili_direct(url: str) -> dict:
     """直接打 Bilibili API 取得影片資訊和 CDN URL，不走 yt-dlp"""
@@ -187,12 +216,20 @@ async def _get_bilibili_direct(url: str) -> dict:
             author = (d.get("owner") or {}).get("name", "")
             embed_url = f"https://player.bilibili.com/player.html?bvid={bvid}&cid={cid}&high_quality=1&danmaku=0"
 
-            # Step 2: 取播放 URL（qn=80=1080P，qn=64=720P，不登入最高通常 480P）
+            # Step 2: 取 WBI key（快取 30 分鐘）
+            wbi_key = await _bili_wbi_key(client)
+
+            # Step 3: 取播放 URL，帶 WBI 簽名（2024年起 playurl 對海外 IP 要求簽名）
             for qn in [80, 64, 32, 16]:
-                pu = (await client.get(
-                    "https://api.bilibili.com/x/player/playurl",
-                    params={"bvid": bvid, "cid": cid, "qn": qn, "fnval": 1, "platform": "pc"}
-                )).json()
+                raw_p = {"bvid": bvid, "cid": cid, "qn": qn, "fnval": 1, "platform": "pc"}
+                signed_p = _bili_wbi_sign(raw_p, wbi_key) if wbi_key else raw_p
+                try:
+                    pu = (await client.get(
+                        "https://api.bilibili.com/x/player/wbi/playurl",
+                        params=signed_p, timeout=10
+                    )).json()
+                except Exception:
+                    continue
                 if pu.get("code") != 0:
                     continue
                 durls = (pu.get("data") or {}).get("durl", [])
