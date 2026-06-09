@@ -244,9 +244,30 @@ async def _get_bilibili_direct(url: str) -> dict:
                             "embed_url": embed_url,
                             "formats": [{"id": str(qn), "label": label, "height": 0}],
                         }
-            # 拿不到直連 → 用 Playwright 瀏覽器模擬（繞過 IP 封鎖）
+            # 拿不到直連 → 用 curl 命令列（不同 TLS 特徵，可能繞過封鎖）
             _cdn_url, _cdn_audio = "", ""
-            try:
+            if not _cdn_url:
+                try:
+                    import subprocess as _sp
+                    _curl_cmd = ["curl", "-s", "--max-time", "10",
+                        "-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+                        "-H", "Referer: https://www.bilibili.com/",
+                        "-H", "Cookie: buvid3=curl-test; b_nut=1700000000;",
+                        f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&qn=64&fnval=1&platform=pc"]
+                    _r = _sp.run(_curl_cmd, capture_output=True, timeout=15)
+                    if _r.returncode == 0:
+                        import json as _json
+                        _j = _json.loads(_r.stdout)
+                        if _j.get("code") == 0:
+                            _durls = (_j.get("data") or {}).get("durl", [])
+                            if _durls and _durls[0].get("url"):
+                                _cdn_url = _durls[0]["url"]
+                except Exception as _curl_ex:
+                    print(f"[bilibili_curl] {_curl_ex}")
+
+            # 拿不到直連 → 用 Playwright 瀏覽器模擬
+            if not _cdn_url:
+                try:
                 from playwright.async_api import async_playwright as _pw
                 async with _pw() as _p:
                     _b = await _p.chromium.launch(headless=True,
