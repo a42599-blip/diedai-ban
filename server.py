@@ -244,7 +244,44 @@ async def _get_bilibili_direct(url: str) -> dict:
                             "embed_url": embed_url,
                             "formats": [{"id": str(qn), "label": label, "height": 0}],
                         }
-            # 拿不到直連，至少返回 embed
+            # 拿不到直連 → 用 Playwright 瀏覽器模擬（繞過 IP 封鎖）
+            _cdn_url, _cdn_audio = "", ""
+            try:
+                from playwright.async_api import async_playwright as _pw
+                async with _pw() as _p:
+                    _b = await _p.chromium.launch(headless=True,
+                        args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
+                    _ctx = await _b.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+                        locale="zh-CN")
+                    _page = await _ctx.new_page()
+                    await _page.goto(f"https://www.bilibili.com/video/{bvid}", timeout=30000, wait_until="networkidle")
+                    await _page.wait_for_timeout(2000)
+                    # 從頁面 JS 取影片 URL
+                    _video_url = await _page.evaluate('''() => {
+                        const v = document.querySelector('video');
+                        if (v) return v.src || '';
+                        // 從 window.__INITIAL_STATE__ 取
+                        const s = window.__INITIAL_STATE__;
+                        if (s && s.videoData && s.videoData.videoInfo) {
+                            return s.videoData.videoInfo.url || '';
+                        }
+                        return '';
+                    }''')
+                    if _video_url:
+                        _cdn_url = _video_url
+                    await _b.close()
+            except Exception as _pw_ex:
+                print(f"[bilibili_pw] {_pw_ex}")
+
+            if _cdn_url:
+                return {"title": title, "thumbnail": thumb, "duration": dur,
+                        "uploader": author, "platform": "Bilibili",
+                        "cdn_url": _cdn_url, "cdn_audio_url": "",
+                        "embed_url": embed_url,
+                        "formats": [{"id":"best","label":"原始畫質","height":0}]}
+
+            # 全部失敗，至少返回 embed
             return {"title": title, "thumbnail": thumb, "duration": dur,
                     "uploader": author, "platform": "Bilibili",
                     "cdn_url": "", "embed_url": embed_url,
