@@ -2300,6 +2300,24 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             yield {"type":"error","message":"YouTube 下載失敗（"+(err_yt[0] if err_yt else "未知錯誤")+"）"}
         return
 
+    # ══ X (Twitter)：用目前時間取代原始上傳時間（iOS 相簿排序用）═══
+    if "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url:
+        _fmt_x = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+        opts_x = {"format": _fmt_x,
+                "outtmpl":str(out_dir/f"{safe}.%(ext)s"),"quiet":True,"no_warnings":True,
+                "merge_output_format":"mp4","concurrent_fragment_downloads":8,
+                "updatetime":True,
+                "postprocessor_args":{"default":["-map_metadata","-1"]}}
+        res_x, err_x = [], []
+        async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
+        if err_x: yield {"type":"error","message":err_x[0]}; return
+        if res_x:
+            sz_x = round(Path(res_x[0]).stat().st_size/1024/1024,1) if Path(res_x[0]).exists() else 0
+            yield {"type":"done","filename":Path(res_x[0]).name,"saved_dir":str(out_dir),"size_mb":sz_x}
+        else:
+            yield {"type":"error","message":"下載失敗，無輸出檔案"}
+        return
+
     # ══ 其他平台（yt-dlp）════════════════════════════════════════
         _fmt = f"bestvideo[height<={_hv}][ext=mp4]+bestaudio[ext=m4a]/best[height<={_hv}][ext=mp4]/best[height<={_hv}]"
     else:
