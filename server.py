@@ -1449,7 +1449,7 @@ async def video_info(url: str):
         }
         # YouTube：Android 客戶端備用（Invidious 已優先嘗試）
         if "youtube.com" in real_url or "youtu.be" in real_url:
-            opts["extractor_args"] = {"youtube": {"player_client": ["ios", "android", "android_embedded", "web"]}}
+            opts["extractor_args"] = {"youtube": {"player_client": ["ios", "android", "android_embedded", "web", "tv", "tv_embedded"]}}
             # 加入公開 YouTube cookies（每次啟動時從 youtube.com 取得）
             try:
                 import httpx as _httpx
@@ -2291,7 +2291,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
-                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","web"]}}}
+                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","web","tv","tv_embedded"]}}}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
