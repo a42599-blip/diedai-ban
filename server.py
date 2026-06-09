@@ -2317,13 +2317,16 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                 # 用 ffmpeg 重設影片內部時間戳記為現在（iOS 相簿排序用）
                 try:
                     import subprocess as _sp_x
-                    _now_x = __import__('datetime').datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                    import os as _os_x
+                    _now_epoch = int(__import__('time').time())
                     _tmp_x = _fp_x.with_suffix('.tmp.mp4')
+                    # ffmpeg：完全清除所有 metadata，iOS 就無法知道原始時間
                     _sp_x.run(["ffmpeg", "-i", str(_fp_x),
                         "-map", "0", "-c", "copy",
-                        "-metadata", f"creation_time={_now_x}",
-                        "-metadata:s:v", f"creation_time={_now_x}",
-                        "-metadata:s:a", f"creation_time={_now_x}",
+                        "-map_metadata", "-1",
+                        "-fflags", "+bitexact",
+                        "-flags:v", "+bitexact",
+                        "-flags:a", "+bitexact",
                         "-y", str(_tmp_x)],
                         capture_output=True, timeout=30)
                     if _tmp_x.exists() and _tmp_x.stat().st_size > 50000:
@@ -2331,10 +2334,10 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                         _tmp_x.rename(_fp_x)
                 except Exception as _ff_x:
                     print(f"[x_fix_time] {_ff_x}")
-                # 也改檔案系統時間
+                # 強制設檔案時間為現在（建立時間 + 修改時間）
                 try:
                     import os as _os_x
-                    _os_x.utime(_fp_x, None)
+                    _os_x.utime(_fp_x, (_now_epoch, _now_epoch))
                 except:
                     pass
             sz_x = round(_fp_x.stat().st_size/1024/1024,1) if _fp_x.exists() else 0
