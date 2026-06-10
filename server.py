@@ -1450,11 +1450,16 @@ async def video_info(url: str):
         # YouTube：Android 客戶端備用（Invidious 已優先嘗試）
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": ["ios", "android", "android_embedded", "web"]}}
-            # 加入公開 YouTube cookies（每次啟動時從 youtube.com 取得）
+            # 加入公開 YouTube cookies
             try:
                 import httpx as _httpx
-                _r = _httpx.get("https://www.youtube.com/", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-                _yt_cookies = dict(_r.cookies)
+                try:
+                    _r = _httpx.get("https://www.youtube.com/", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                    _yt_cookies = dict(_r.cookies)
+                except:
+                    _yt_cookies = {}
+                if not _yt_cookies:
+                    _yt_cookies = {"VISITOR_INFO1_LIVE":"spsVyPuBEu0","YSC":"ZrKtopkZD3s","GPS":"1"}
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
