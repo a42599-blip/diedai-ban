@@ -163,9 +163,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 @keyframes fi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
 /* ══ 頁尾資訊連結 ══ */
-.footer-links{text-align:center;padding:12px 20px 60px;font-size:0.72rem;color:#1d4a45}
-.footer-links a{color:#2d6b65;text-decoration:none;margin:0 8px;cursor:pointer}
+.footer-links{text-align:center;padding:10px 16px 4px;font-size:0.73rem;display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap}
+.footer-links a{color:#2d6b65;text-decoration:none;cursor:pointer;white-space:nowrap}
 .footer-links a:hover{color:#5eead4}
+.fl-sep{color:#1d4a45;font-size:0.65rem}
 
 /* ══ 資訊彈窗 ══ */
 .info-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:8000;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -248,6 +249,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <span class="pbadge pb-ig" data-i18n="ig">Instagram</span>
     </div>
     <div class="dl-notice" data-i18n="dlNotice">⚠️ 解析後請立即下載，影片連結可能隨時失效，切換頁面後需重新解析</div>
+    <div class="footer-links">
+      <a onclick="showInfo('about')">關於我們</a>
+      <span class="fl-sep">|</span>
+      <a onclick="showInfo('disclaimer')">免責聲明</a>
+      <span class="fl-sep">|</span>
+      <a onclick="showInfo('contact')">聯絡我們</a>
+      <span class="fl-sep">|</span>
+      <a onclick="showInfo('privacy')">隱私權政策</a>
+    </div>
   </div>
 </div>
 
@@ -344,15 +354,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <div class="ad-slot" id="adSlot3"><!-- Slot 3: 預留 --></div>
 </div>
 
-<!-- ══ 頁尾資訊連結 ══ -->
-<div class="footer-links">
-  <a onclick="showInfo('about')">關於我們</a>
-  <span style="color:#1d4a45">|</span>
-  <a onclick="showInfo('contact')">聯絡我們</a>
-  <span style="color:#1d4a45">|</span>
-  <a onclick="showInfo('privacy')">隱私權政策</a>
-</div>
-
 <!-- ══ 關於我們彈窗 ══ -->
 <div id="info-about" class="info-modal hide" onclick="if(event.target===this)hideInfo('about')">
   <div class="info-box">
@@ -392,6 +393,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
       <li>您貼上的連結僅用於即時解析，解析結果<strong>不會永久保存</strong>。</li>
       <li>下載的影片暫存於伺服器僅供取回，取回後<strong>自動刪除</strong>。</li>
       <li>本工具僅使用必要的 localStorage 記錄您的解析紀錄（儲存在您自己的瀏覽器中），<strong>不追蹤瀏覽行為</strong>。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══ 免責聲明彈窗（與首次使用彈窗內容一致）══ -->
+<div id="info-disclaimer" class="info-modal hide" onclick="if(event.target===this)hideInfo('disclaimer')">
+  <div class="info-box">
+    <button class="close-btn" onclick="hideInfo('disclaimer')">✕</button>
+    <h2>⚠️ 免責聲明</h2>
+    <p>本工具僅供<strong style="color:#4ade80">個人合法用途</strong>使用，例如下載自己擁有版權的內容、或在各平台明確允許下載的公開影片。</p>
+    <ul>
+      <li>本工具不儲存任何使用者影片或個人資料</li>
+      <li>下載行為由使用者自行負責，請遵守各國著作權法及各平台服務條款</li>
+      <li>禁止利用本工具從事商業侵權、非法散布受版權保護的內容</li>
+      <li>本工具開發者不對任何使用者的下載行為承擔法律責任</li>
     </ul>
   </div>
 </div>
