@@ -1580,15 +1580,10 @@ async def video_info(url: str):
         err_str = str(ex)
         el = err_str.lower()
         hint = ""
-        if any(k in el for k in ("login", "cookie", "sign in", "authentication", "403", "forbidden", "private")):
-            hint = "此影片需要登入 Cookies，請至設定頁面貼上 Cookies 後再試"
-        elif any(k in el for k in ("geo", "region", "not available in your country", "georestrict")):
+        if any(k in el for k in ("geo", "region", "not available in your country", "georestrict")):
             hint = "此影片有地區限制，無法從目前位置觀看"
         elif any(k in el for k in ("not found", "removed", "deleted", "does not exist", "404")):
             hint = "此影片已刪除或不存在"
-
-        elif "tiktok.com" in real_url:
-            hint = "TikTok 影片解析失敗，請至設定頁面貼上 TikTok Cookies"
         return JSONResponse({"error": err_str, "error_hint": hint, "resolved_url": real_url})
 
 # ── 下載去水印 ────────────────────────────────────────────
