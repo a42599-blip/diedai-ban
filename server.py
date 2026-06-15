@@ -2341,12 +2341,16 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                 try:
                     import subprocess as _sp_x
                     import os as _os_x
+                    from datetime import datetime as _dt
                     _now_epoch = int(__import__('time').time())
+                    _now_iso = _dt.now().strftime('%Y-%m-%dT%H:%M:%S')
                     _tmp_x = _fp_x.with_suffix('.tmp.mp4')
-                    # ffmpeg：完全清除所有 metadata，iOS 就無法知道原始時間
+                    # ffmpeg：清除原始 metadata，並設新的 creation_time 為現在
                     _sp_x.run(["ffmpeg", "-i", str(_fp_x),
                         "-map", "0", "-c", "copy",
                         "-map_metadata", "-1",
+                        "-metadata", f"creation_time={_now_iso}",
+                        "-metadata", f"com.apple.quicktime.creationdate={_now_iso}",
                         "-fflags", "+bitexact",
                         "-flags:v", "+bitexact",
                         "-flags:a", "+bitexact",
