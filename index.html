@@ -624,15 +624,16 @@ async function dlVideo(url, title, cdnUrl, cdnAudioUrl, quality){
           if (dlsEl) setTimeout(loadDls, 500);
           fill.style.width='100%'; pctEl.textContent='100%';
           es.close();
-          if(isMobile() && d.filename && d.saved_dir){
+          if(d.filename){
             const dlHref=API+'/api/serve-file?filename='+encodeURIComponent(d.filename)+'&cleanup=true';
-            const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
-            if(isIOS){ _iosSaveSetup(ov,dlHref,d.filename,d.size_mb+'MB'); }
-            else      { _androidSaveSetup(ov,dlHref,d.filename,d.size_mb+'MB'); }
-          } else {
-            setTimeout(()=>{ ov.style.display='none'; },2000);
-            toast(`✅ 已儲存：${d.filename}（${d.size_mb}MB）`);
-            loadDls();
+            if(isMobile()){
+              const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+              if(isIOS){ _iosSaveSetup(ov,dlHref,d.filename,d.size_mb+'MB'); }
+              else      { _androidSaveSetup(ov,dlHref,d.filename,d.size_mb+'MB'); }
+            } else {
+              ov.innerHTML='<div style="text-align:center;padding:8px 0"><div style="font-size:0.9rem;color:#6ee7b7;margin-bottom:12px">✅ 下載完成</div><a href="'+dlHref.replace(/"/g,'%22')+'" style="display:block;width:100%;padding:13px;background:linear-gradient(135deg,#0d9488,#14b8a6);color:#fff;border-radius:12px;font-size:1rem;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:none;text-align:center;box-sizing:border-box">📥 儲存到電腦</a><button onclick="document.getElementById(\'dl-overlay\').style.display=\'none\'" style="background:transparent;border:1px solid #065f46;color:#6ee7b7;border-radius:8px;padding:6px 20px;cursor:pointer;font-size:0.8rem">關閉</button></div>';
+              loadDls();
+            }
           }
           // 下載完成後不重置預覽區，讓用戶還可以看
           // 只清空輸入框（方便貼下一個），但預覽留著
