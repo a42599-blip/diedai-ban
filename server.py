@@ -246,6 +246,23 @@ async def _get_bilibili_direct(url: str) -> dict:
                         }
             # 拿不到直連 → 用 curl 命令列（不同 TLS 特徵，可能繞過封鎖）
             _cdn_url, _cdn_audio = "", ""
+            # 拿不到直連 → 用手機 HTML5 API（可繞過海外 IP 封鎖）
+            for qn_mob in [80, 64, 32, 16]:
+                try:
+                    async with httpx.AsyncClient(timeout=10) as mob_c:
+                        mob_p = {"bvid": bvid, "cid": cid, "qn": qn_mob, "fnval": 0, "platform": "html5"}
+                        mob_r = await mob_c.get("https://api.bilibili.com/x/player/playurl",
+                            params=mob_p,
+                            headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                                     "Referer": "https://www.bilibili.com/"})
+                        mob_j = mob_r.json()
+                        if mob_j.get("code") == 0:
+                            durls_mob = (mob_j.get("data") or {}).get("durl", [])
+                            if durls_mob and durls_mob[0].get("url"):
+                                _cdn_url = durls_mob[0]["url"]
+                                break
+                except Exception:
+                    continue
             if not _cdn_url:
                 try:
                     import subprocess as _sp
@@ -365,7 +382,8 @@ def extract_url_from_text(text: str) -> str:
 async def resolve_short_url(url: str) -> str:
     text_url = extract_url_from_text(url)
     SHORT_DOMAINS = ("v.douyin.com",
-                     "xhslink.com", "t.co", "vm.tiktok.com", "vt.tiktok.com")
+                     "xhslink.com", "t.co", "vm.tiktok.com", "vt.tiktok.com",
+                     "b23.tv")
     if any(d in text_url for d in SHORT_DOMAINS):
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=12,
