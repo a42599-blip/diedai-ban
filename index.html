@@ -40,7 +40,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .pb-ig{background:#1a080a;border-color:#3a1020;color:#e879f9}
 
 /* ══ MAIN ══ */
-.main{max-width:680px;margin:0 auto;padding:24px 20px 100px}
+.main{max-width:680px;margin:0 auto;padding:24px 20px 90px}
 
 /* URL card */
 .url-card{background:linear-gradient(160deg,#0b1a18,#081410);border:1px solid #0d2420;border-radius:16px;padding:20px;margin-bottom:16px}
@@ -153,6 +153,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 
 /* ══ TOAST ══ */
 .toast{position:fixed;top:12px;right:12px;background:#059669;color:#fff;padding:8px 14px;border-radius:8px;font-size:0.8rem;z-index:999;animation:fi .3s;max-width:280px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+
+/* ══ 廣告列（底部固定）══ */
+.ad-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,13,12,.96);border-top:1px solid #0d2420;padding:4px 8px;display:flex;justify-content:center;align-items:center;gap:4px;backdrop-filter:blur(8px);min-height:50px}
+.ad-slot{flex:1;max-width:320px;display:none;justify-content:center;align-items:center;min-height:50px}
+.ad-slot.active{display:flex}
+@media(min-width:768px){.ad-bar{gap:8px;padding:4px 16px}.ad-slot{max-width:340px}}
 .toast.err{background:#dc2626}
 @keyframes fi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
@@ -315,6 +321,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <span id="dl-msg">準備中...</span>
     <span id="dl-pct">0%</span>
   </div>
+</div>
+
+<!-- ══ 廣告列（底部固定，預留最多3格）══ -->
+<div class="ad-bar" id="adBar">
+  <div class="ad-slot active" id="adSlot1"><!-- Slot 1: PropellerAds 未來貼這裡 --></div>
+  <div class="ad-slot" id="adSlot2"><!-- Slot 2: 預留 --></div>
+  <div class="ad-slot" id="adSlot3"><!-- Slot 3: 預留 --></div>
 </div>
 
 <script>
