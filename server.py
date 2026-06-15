@@ -1811,7 +1811,7 @@ async def serve_file(filename: str = "", path: str = "", cleanup: bool = False, 
                 if fpath.exists(): fpath.unlink()
             except Exception: pass
         bg = BackgroundTask(_rm)
-    hdrs = {} if inline else {"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"}
+    hdrs = {} if inline else {"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}; filename=video.mp4"}
     return FileResponse(str(fpath), media_type=mime, headers=hdrs, background=bg)
 
 @app.get("/api/dl-stream")
@@ -1845,7 +1845,7 @@ async def dl_stream(request: Request, url: str, title: str = "影片", referer: 
         return JSONResponse({"error": "cdn returned non-video response"}, status_code=502)
 
     resp_headers: dict = {
-        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}; filename=video.mp4",
         "Accept-Ranges": "bytes",
         "Cache-Control": "no-cache",
     }
