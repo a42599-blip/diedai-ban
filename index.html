@@ -162,6 +162,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .toast.err{background:#dc2626}
 @keyframes fi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
+/* ══ 頁尾資訊連結 ══ */
+.footer-links{text-align:center;padding:12px 20px 60px;font-size:0.72rem;color:#1d4a45}
+.footer-links a{color:#2d6b65;text-decoration:none;margin:0 8px;cursor:pointer}
+.footer-links a:hover{color:#5eead4}
+
+/* ══ 資訊彈窗 ══ */
+.info-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:8000;display:flex;align-items:center;justify-content:center;padding:16px}
+.info-modal.hide{display:none}
+.info-box{background:#0d1f16;border:1px solid #166534;border-radius:16px;width:100%;max-width:500px;padding:24px;max-height:85vh;overflow-y:auto;position:relative}
+.info-box h2{color:#4ade80;font-size:1rem;margin-bottom:14px;text-align:center}
+.info-box p,.info-box li{font-size:0.78rem;color:#94a3b8;line-height:1.8;margin-bottom:10px}
+.info-box ul{padding-left:18px}
+.info-box .close-btn{position:absolute;top:9px;right:9px;background:rgba(0,0,0,.55);border:none;color:#fff;width:27px;height:27px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;z-index:10}
+
 /* ══ DOWNLOAD PROGRESS OVERLAY ══ */
 #dl-overlay{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(4,20,14,.96);border:1px solid #065f46;color:#a7f3d0;padding:14px 20px;border-radius:14px;min-width:300px;max-width:420px;z-index:1100;display:none;box-shadow:0 8px 32px rgba(0,0,0,.6);backdrop-filter:blur(8px)}
 #dl-overlay-title{font-size:0.78rem;color:#6ee7b7;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -330,9 +344,63 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <div class="ad-slot" id="adSlot3"><!-- Slot 3: 預留 --></div>
 </div>
 
+<!-- ══ 頁尾資訊連結 ══ -->
+<div class="footer-links">
+  <a onclick="showInfo('about')">關於我們</a>
+  <span style="color:#1d4a45">|</span>
+  <a onclick="showInfo('contact')">聯絡我們</a>
+  <span style="color:#1d4a45">|</span>
+  <a onclick="showInfo('privacy')">隱私權政策</a>
+</div>
+
+<!-- ══ 關於我們彈窗 ══ -->
+<div id="info-about" class="info-modal hide" onclick="if(event.target===this)hideInfo('about')">
+  <div class="info-box">
+    <button class="close-btn" onclick="hideInfo('about')">✕</button>
+    <h2>📄 關於我們</h2>
+    <p>本工具（v8i8.com）旨在提供一個便捷的跨平台影片連結解析與下載服務，幫助用戶快速取得公開影片素材。</p>
+    <p><strong>免責聲明：</strong></p>
+    <ul>
+      <li>本工具僅供<strong>個人合法用途</strong>使用，例如下載自己擁有版權的內容、或在各平台明確允許下載的公開影片。</li>
+      <li>用戶自行貼上的任何連結，皆視為用戶已取得該內容之合法使用權。本工具不儲存、不審核、不承擔任何與該內容相關的著作權責任。</li>
+      <li>下載行為由使用者<strong>自行負責</strong>，請遵守各國著作權法及各平台服務條款。</li>
+      <li>本工具開發者不對任何使用者的下載行為承擔法律責任。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══ 聯絡我們彈窗 ══ -->
+<div id="info-contact" class="info-modal hide" onclick="if(event.target===this)hideInfo('contact')">
+  <div class="info-box">
+    <button class="close-btn" onclick="hideInfo('contact')">✕</button>
+    <h2>📧 聯絡我們</h2>
+    <p>如有任何問題、建議或合作洽詢，歡迎來信：</p>
+    <p style="text-align:center;font-size:0.9rem;color:#6ee7b7;margin:16px 0;word-break:break-all">
+      <a href="mailto:a42599@gmail.com" style="color:#34d399;text-decoration:none">a42599@gmail.com</a>
+    </p>
+  </div>
+</div>
+
+<!-- ══ 隱私權政策彈窗 ══ -->
+<div id="info-privacy" class="info-modal hide" onclick="if(event.target===this)hideInfo('privacy')">
+  <div class="info-box">
+    <button class="close-btn" onclick="hideInfo('privacy')">✕</button>
+    <h2>🔒 隱私權政策</h2>
+    <p><strong>最後更新：2026-06-15</strong></p>
+    <ul>
+      <li>本工具<strong>不收集任何個人資料</strong>，使用時無需註冊或登入。</li>
+      <li>您貼上的連結僅用於即時解析，解析結果<strong>不會永久保存</strong>。</li>
+      <li>下載的影片暫存於伺服器僅供取回，取回後<strong>自動刪除</strong>。</li>
+      <li>本工具僅使用必要的 localStorage 記錄您的解析紀錄（儲存在您自己的瀏覽器中），<strong>不追蹤瀏覽行為</strong>。</li>
+    </ul>
+  </div>
+</div>
+
 <script>
 const API = '';
 let urlInfo = null;
+function showInfo(id){document.getElementById('info-'+id).classList.remove('hide');}
+function hideInfo(id){document.getElementById('info-'+id).classList.add('hide');}
 
 /* ── 免責聲明 ── */
 function agreeDisclaimer(){
