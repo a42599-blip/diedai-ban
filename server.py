@@ -22,7 +22,13 @@ DOWNLOAD_DIR      = BASE_DIR / "下載影片"
 # ── yt-dlp EJS（External JavaScript Solver）設定 ───────
 # 讓 yt-dlp 能下載並使用 JS 解 YouTube 機器人驗證
 # js_runtimes 預設就是 {"deno": {}}（yt-dlp 自己會找），不需要手動傳
-_YT_OPTS_EXTRA = {}
+_YT_OPTS_EXTRA = {
+    # 明確指定 Deno JS runtime（yt-dlp 會自動偵測，但明確設確保抓到）
+    "js_runtimes": {"deno": {}},
+    # 失敗時指數退避重試
+    "retry_sleep": "extractor:exp=1:20",
+    "fragment_retries": 10,
+}
 
 COOKIES_FILE      = BASE_DIR / "platform_cookies.json"
 DOWNLOAD_REGISTRY = DOWNLOAD_DIR / ".download_registry.json"
@@ -1478,24 +1484,26 @@ async def video_info(url: str):
             "quiet": True, "no_warnings": True, "skip_download": True,
             "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
         }
-        # YouTube：Android 客戶端備用 + Deno JS runtime 解驗證
+        # YouTube：player_client=all + Deno JS runtime 解驗證
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": "all"}}
             opts.update(_YT_OPTS_EXTRA)
-            # 加入 YouTube cookies（每次請求從 youtube.com 抓匿名 cookies，不用私人 cookies）
+            # 每次請求從 Railway httpx 抓匿名 cookies（不綁任何私人帳號）
             try:
                 _yt_cookies = {}
-                # 1) Railway 環境變數（可讓 admin 隨時更新，非常時期才用）
+                # 1) Railway 環境變數（緊急備用，平常不要設）
                 _yt_env = os.environ.get("YT_COOKIES_JSON", "")
                 if _yt_env:
                     try:
                         _yt_cookies.update(json.loads(_yt_env))
                     except Exception:
                         pass
-                # 2) 即時抓 youtube.com 匿名 cookies（每次請求最新，不綁私人帳號）
+                # 2) 即時抓 youtube.com 匿名 cookies
                 try:
                     import httpx as _httpx
-                    _r = _httpx.get("https://www.youtube.com/", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                    _r = _httpx.get("https://www.youtube.com/",
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                        timeout=10, follow_redirects=True)
                     _yt_cookies.update(dict(_r.cookies))
                 except Exception:
                     pass
