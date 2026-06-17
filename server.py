@@ -1137,6 +1137,13 @@ async def _download_from_cdn(cdn_url: str, out_dir: Path, title: str,
 def index():
     return FileResponse(str(BASE_DIR / "index.html"),
                         headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+@app.get("/api/ad-iframe")
+def ad_iframe():
+    """提供隔離的廣告 HTML，讓手機版 iframe 載入（跨域隔離，無法跳轉父頁面）"""
+    ad_html = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=320"><style>body{margin:0;padding:0;overflow:hidden;background:transparent}</style></head><body><script>atOptions={key:'2f4c8115eed4bad1123d0f76fe5b8ec2',format:'iframe',height:50,width:320,params:{}};<\/script><script src='https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js'><\/script></body></html>"""
+    return HTMLResponse(content=ad_html, headers={"Cache-Control":"no-cache","X-Frame-Options":"ALLOWALL"})
+
 @app.get("/api/debug-douyin")
 async def debug_douyin(url: str = ""):
     """Debug endpoint to test Douyin API connectivity from Railway."""
@@ -1477,7 +1484,7 @@ async def video_info(url: str):
                 except:
                     _yt_cookies = {}
                 # 永遠用最新的 fallback cookies 覆蓋關鍵值，避免 httpx 抓到不完整的 cookies
-                _fallback_yt = {"VISITOR_INFO1_LIVE":"ArXQGyFvFL0","YSC":"DEWfJ7Tkip8","GPS":"1","__Secure-ROLLOUT_TOKEN":"CL-4guLB3qTGLRDZ3fmzn46VAxjZ3fmzn46VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgEw=="}
+                _fallback_yt = {"VISITOR_INFO1_LIVE":"2gZECTQgDMM","YSC":"OMIY1TTdAHw","GPS":"1","__Secure-ROLLOUT_TOKEN":"CL7H1ry269izYBDIvrC3oI6VAxjIvrC3oI6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgKg=="}
                 for _k, _v in _fallback_yt.items():
                     _yt_cookies[_k] = _v
                 if _yt_cookies:
