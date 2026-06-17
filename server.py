@@ -19,9 +19,8 @@ import uvicorn
 BASE_DIR          = Path(__file__).parent
 DOWNLOAD_DIR      = BASE_DIR / "下載影片"
 
-# ── yt-dlp EJS（External JavaScript Solver）設定 ───────
-# 讓 yt-dlp 能下載並使用 JS 解 YouTube 機器人驗證
-# js_runtimes 預設就是 {"deno": {}}（yt-dlp 自己會找），不需要手動傳
+# ── yt-dlp 額外設定 ──────────────────────────────
+# js_runtimes 明確指定 Deno（yt-dlp 會自動偵測，但明確設確保 Railway 抓到）
 _YT_OPTS_EXTRA = {
     # 明確指定 Deno JS runtime（yt-dlp 會自動偵測，但明確設確保抓到）
     "js_runtimes": {"deno": {}},

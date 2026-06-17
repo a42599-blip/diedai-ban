@@ -1,148 +1,188 @@
 # 🚨 v8i8.com YouTube 故障修復 SOP（永久記憶）
 
-> 最後更新：2026-06-17 21:00
-> ⚠️ **每次 YouTube 壞掉都只做這 2 件事，不要多加東西！**
+> 最後更新：2026-06-18
+> ⚠️ **YouTube 是唯一會自己壞掉的平台**（即使沒人動任何東西）
+> ⚠️ **每次 YouTube 壞掉，先讀這份 SOP，照步驟做**
 
 ---
 
 ## 一、症狀
 
-YouTube 影片解析失敗，出現錯誤：
+YouTube 影片解析失敗，出現：
 ```
-Sign in to confirm you're not a bot
+ERROR: [youtube] ...: Sign in to confirm you're not a bot
 ```
 或：
 ```
 HTTP Error 403
 ```
 
-## 二、根因
+## 二、真正原因（累積經驗，不是猜的）
 
-**只有一個原因：YouTube 的 cookies 過期了。**
+### 2026-06-18 這次（最新經驗）
+**沒人動任何東西，YouTube 自己壞掉。** 原因不是 cookies 過期：
 
-YouTube 會封鎖 Railway 的雲端 IP，yt-dlp 需要有效的 cookies 才能通過驗證。
-跟 yt-dlp 版本、JS runtime、Deno、Node.js **完全無關**。
+| # | 問題 | 說明 |
+|:-:|:----|:------|
+| 1 | ❌ `remote_components: ["ejs:github"]` | 讓 yt-dlp 去 GitHub 下載 JS 腳本，下載失敗或限流時卡住 |
+| 2 | ❌ 沒有明確指定 Deno JS runtime | yt-dlp 號稱會自動偵測，但 Railway 上不一定抓到 |
+| 3 | ❌ 沒有重試機制 | 雲端 IP 打 YouTube 第一次失敗就放棄，不重試 |
+| 4 | ❌ yt-dlp 鎖在舊版 `2026.3.17` | 新版才有最新繞過機制 |
 
-## 三、修復方法（只做這 2 步，不要多做！）
+### 2026-06-16/17 之前的經驗
+| # | 問題 | 說明 |
+|:-:|:----|:------|
+| 5 | ❌ TV 客戶端有 DRM | `tv/tv_embedded` 會被 YouTube A/B 測試啟用 DRM |
+| 6 | ❌ cookies fallback 被 httpx 蓋掉 | httpx 在 Railway 上永遠成功但回傳不完整 cookies |
+| 7 | ❌ 用了私人 cookies | 公共服務不能用，且 cookies 會過期 |
 
-### 步驟 1：確認 `player_client` 是 `"all"`
+## 三、修復方法（照順序做，不要跳步）
 
-去 `server.py` 檢查這兩處：
+### Step 1：確認 yt-dlp 版本沒被鎖
 
-```python
-# 第 1483 行（info 解析端）
-opts["extractor_args"] = {"youtube": {"player_client": "all"}}
-
-# 第 2337 行（下載端）
-"extractor_args":{"youtube":{"player_client":"all"}},
+檢查 `requirements.txt`：
+```
+✅ yt-dlp           ← 正確（沒鎖版本）
+❌ yt-dlp==2026.3.17 ← 錯誤，要解鎖
 ```
 
-如果是 `["ios", "android", ...]` 這種列表，改成 `"all"`。
-**不要改成別的，就是 `"all"`。**
+### Step 2：確認 `_YT_OPTS_EXTRA` 設定正確
 
-### 步驟 2：更新 cookies（這才是真正的修復）
-
-從本機 Windows 執行這行指令，拿到最新的 YouTube cookies：
-
-```bash
-curl -sL -c /tmp/yt_cookies.txt "https://www.youtube.com/" \
-  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-cat /tmp/yt_cookies.txt
-```
-
-把輸出的 cookie 值，更新到 `server.py` 中的 `_fallback` 字典：
+檢查 `server.py` 開頭的 `_YT_OPTS_EXTRA`：
 
 ```python
-_fallback = {
-    "VISITOR_INFO1_LIVE": "<新值>",
-    "YSC": "<新值>",
-    "GPS": "1",
-    "__Secure-ROLLOUT_TOKEN": "<新值>",
-    "VISITOR_PRIVACY_METADATA": "<新值>",
-    "__Secure-YNID": "<新值>",
+# ✅ 正確的設定
+_YT_OPTS_EXTRA = {
+    "js_runtimes": {"deno": {}},         # 明確指定 Deno（必要！）
+    "retry_sleep": "extractor:exp=1:20", # 失敗時指數退避重試
+    "fragment_retries": 10,             # 片段下載重試次數
 }
+
+# ❌ 錯誤的設定（裡面有 remote_components）
+_YT_OPTS_EXTRA = {"remote_components": ["ejs:github"]}
 ```
 
-**注意：** cookies 值是 URL-encoded 的（`%3D` = `=`，`%2F` = `/`），貼到 Python 時要解碼。
+如果缺少任何一項 → 補上。
+如果有 `remote_components` → 移除。
 
-### 這 2 步做完 → commit → push → Railway 自動部署
+### Step 3：確認 `player_client` = `"all"`
+
+檢查 `server.py` 中兩處（解析端 + 下載端）：
+
+```python
+# ✅ 正確
+"extractor_args": {"youtube": {"player_client": "all"}}
+
+# ❌ 錯誤
+"extractor_args": {"youtube": {"player_client": ["ios", "android", "web"]}}
+```
+
+### Step 4：確認沒有寫死任何私人 cookies
+
+檢查 YouTube cookies 區塊，應該是：
+```python
+# ✅ 正確：每次從 Railway httpx 抓匿名 cookies
+_yt_cookies = {}
+_r = httpx.get("https://www.youtube.com/", ...)
+_yt_cookies.update(dict(_r.cookies))
+
+# ❌ 錯誤：有硬編碼的 cookie 字串
+_yt_cookies = {"VISITOR_INFO1_LIVE":"xxx", ...}  # ← 這是私人 cookies，不能用！
+```
+
+### Step 5：commit & push 到 Railway
 
 ```bash
-git add server.py
-git commit -m "fix: 更新 YouTube cookies（從本機 youtube.com 即時取得）"
+cd D:/pi-agent/diedai-ban-work
+git add server.py requirements.txt
+git commit -m "fix: YouTube 修復 - [寫你改了什麼]"
 git push origin master
 ```
 
-等約 1 分鐘讓 Railway 部署完成。
+等約 2 分鐘讓 Railway 建置 + 部署。
 
-## 四、驗證修復
-
-測試之前會失敗的影片（Me at the zoo，YouTube 第一個影片，常被擋）：
+### Step 6：驗證
 
 ```bash
 curl -sL "https://v8i8.com/api/video-info?url=https://www.youtube.com/watch?v=jNQXAC9IVRw"
 ```
 
-回傳 `title` 和 `formats` 就是修好了，回傳 `error` 就是還沒好。
+| 結果 | 意思 |
+|:----|:------|
+| 回傳 `title` + `formats` | ✅ **修好了** |
+| 回傳 `error` | ❌ **還沒好**，回到 Step 1 重新檢查 |
 
-## 五、進階：環境變數備援（不用改 code）
+## 四、如果 Step 1~6 都做了還是壞
 
-如果不想每次改 code，可以在 Railway Dashboard 設定環境變數：
+### 情況 A：可能是 yt-dlp 最新版有 bug
+解法：暫時鎖定到本機測試能用的版本（目前本機是 2026.06.09）
+```bash
+# 在 requirements.txt 寫：
+yt-dlp==2026.06.09
+```
 
+### 情況 B：可能是 Railway 環境問題
+解法：滾回穩定版標籤
+```bash
+git checkout v1.2-stable
+git push origin master --force
+```
+
+### 情況 C：真的不知道為什麼
+解法：完整診斷，加暫時的 debug log 看 yt-dlp 實際報錯
+
+## 五、進階：環境變數備援
+
+在 Railway Dashboard 可以設定 `YT_COOKIES_JSON` 環境變數：
 ```
 Key:   YT_COOKIES_JSON
-Value: {"VISITOR_INFO1_LIVE":"xxx","YSC":"xxx","__Secure-ROLLOUT_TOKEN":"xxx",...}
+Value: {"VISITOR_INFO1_LIVE":"xxx", "YSC":"xxx", ...}
 ```
+**平常不要設**，只有非常時期才用。
 
-程式會優先讀環境變數，再補即時抓的，最後才用寫死備援。
+## 六、YouTube 為什麼比其他平台脆弱？
 
-## 六、重要警語（每次必讀）
-
-### ❌ 不要做的事（我踩過的坑）
-
-| 不要做 | 為什麼 |
-|--------|--------|
-| ❌ 不要碰 `js_runtimes` | yt-dlp Python API 預設就是 `{"deno": {}}`，傳 list 反而壞掉 |
-| ❌ 不要裝 Deno/Node | 跟 YouTube 修復無關，yt-dlp 不需要也能解 |
-| ❌ 不要加 EJS/remote_components | 非必要，加了不會更好 |
-| ❌ 不要改 yt-dlp 版本 | 小羅決定不鎖版本，保持最新 |
-| ❌ 不要碰 Invidious | 所有實例都死了 |
-| ❌ 不要改 Dockerfile | Railway 上本來就能跑 |
-| ❌ 不要推錯 repo | `v8i8.com` 正式站是 `a42599-blip/diedai-ban`，不是 `video-downloader` |
-
-### ✅ 唯一要做的事
-
-**只更新 cookies，只改 `server.py` 中的 `_fallback` 字典。**
-
-如果 cookies 更新了還是不行，試試把 Chrome 完全關閉再重開，然後重新 curl。
+| 平台 | 穩定度 | 原因 |
+|:----|:------:|:------|
+| 抖音/TikTok | 🟢 幾乎不壞 | 用第三方 API 解析，不走 yt-dlp |
+| B站 | 🟡 有時壞 | 海外 IP 被封，但有 HTML5 fallback |
+| 小紅書/蝦皮/FB/IG | 🟢 幾乎不壞 | 直解 HTML 或 CDN |
+| **YouTube** | **🔴 最脆弱** | **yt-dlp 依賴 + 雲端 IP 被封 + A/B 測試頻繁** |
 
 ## 七、專案資訊
 
 | 項目 | 內容 |
 |------|------|
-| **正式站網址** | https://v8i8.com |
+| **正式站** | https://v8i8.com |
 | **GitHub repo** | `a42599-blip/diedai-ban`（master） |
 | **Railway 專案** | diedai-ban |
+| **Railway 服務 ID** | `361f70f3-4163-4edc-8977-624242ca9974` |
 | **本機目錄** | `D:/pi-agent/diedai-ban-work/` |
-| **Cloudflare** | v8i8.com → Railway |
-| **備援站** | aa.v8i8.com（`video-downloader`，不要動） |
+| **備援站** | aa.v8i8.com（video-downloader，不要動） |
 
-## 八、修復快速指令（複製貼上就完成）
+## 八、修復快速指令（複製貼上）
 
 ```bash
-# 1. 拿新 cookies
-curl -sL -c /tmp/yt_cookies.txt "https://www.youtube.com/" -H "User-Agent: Mozilla/5.0"
-cat /tmp/yt_cookies.txt
-
-# 2. 更新 server.py 中的 _fallback 字典
-# （手動編輯，把上面 cat 出來的值填進去）
-
-# 3. commit & push
+# 1. 進目錄
 cd D:/pi-agent/diedai-ban-work
-git add server.py
-git commit -m "fix: 更新 YouTube cookies"
+
+# 2. 確認 requirements.txt 沒鎖 yt-dlp
+cat requirements.txt | grep yt-dlp
+# 應該顯示：yt-dlp（沒有 == 版本號）
+
+# 3. 確認 server.py 的 _YT_OPTS_EXTRA 有 js_runtimes
+grep -A 5 "_YT_OPTS_EXTRA" server.py
+# 應該有：js_runtimes, retry_sleep, fragment_retries
+
+# 4. 確認 player_client=all
+grep "player_client" server.py | head -2
+# 應該顯示："player_client": "all"
+
+# 5. commit & push
+git add server.py requirements.txt
+git commit -m "fix: YouTube 修復 - cookies更新/js_runtimes/重試"
 git push origin master
 
-# 4. 等 1 分鐘，驗證
+# 6. 等 2 分鐘，驗證
 curl -sL "https://v8i8.com/api/video-info?url=https://www.youtube.com/watch?v=jNQXAC9IVRw"
 ```
