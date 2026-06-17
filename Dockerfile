@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 安裝 Deno（JS runtime，yt-dlp 需要它解 YouTube 機器人驗證）
-RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
+# ⚠️ 鎖定版本！每次部署抓最新版會導致 Deno 更新後 yt-dlp 不相容
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s -- v2.8.3
 ENV PATH="/usr/local/bin:${PATH}"
 
 WORKDIR /app
