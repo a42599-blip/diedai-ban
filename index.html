@@ -381,18 +381,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 
 <!-- ══ 廣告列（底部固定，預留最多3格）══ -->
 <div class="ad-bar" id="adBar">
-  <!-- Slot 1: 手機版 320x50（直接載入，無 iframe 隔離） -->
+  <!-- Slot 1: 手機版 320x50（iframe 隔離 + 延遲載入，防止跳轉） -->
   <div class="ad-slot active" id="adSlot1">
     <script>
-      atOptions = {
-        'key' : '2f4c8115eed4bad1123d0f76fe5b8ec2',
-        'format' : 'iframe',
-        'height' : 50,
-        'width' : 320,
-        'params' : {}
-      };
+    (function(){
+      var s1 = document.getElementById('adSlot1');
+      if(!s1) return;
+      // 先建立一個空白 iframe
+      var ifr = document.createElement('iframe');
+      ifr.style.cssText = 'width:320px;height:50px;border:none;overflow:hidden;display:block;margin:0 auto;background:transparent';
+      ifr.setAttribute('sandbox','allow-scripts allow-same-origin');
+      s1.appendChild(ifr);
+      // 延遲 500ms 後才寫入廣告代碼，讓頁面先穩定
+      setTimeout(function(){
+        try {
+          var doc = ifr.contentDocument || ifr.contentWindow.document;
+          doc.open();
+          doc.write('<html><body style="margin:0;padding:0;overflow:hidden">');
+          doc.write('<scr' + 'ipt>atOptions={key:"2f4c8115eed4bad1123d0f76fe5b8ec2",format:"iframe",height:50,width:320,params:{}};<\/scr' + 'ipt>');
+          doc.write('<scr' + 'ipt src="https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js"><\/scr' + 'ipt>');
+          doc.write('<\/body><\/html>');
+          doc.close();
+        } catch(e) { console.log(e); }
+      }, 500);
+    })();
     </script>
-    <script src="https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js"></script>
   </div>
   <!-- Slot 2: 桌機版 728x90（中間）→ 由 JS 動態注入，手機不載入 -->
   <div class="ad-slot" id="adSlot2">
