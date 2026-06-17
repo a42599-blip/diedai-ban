@@ -381,12 +381,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 
 <!-- ══ 廣告列（底部固定，預留最多3格）══ -->
 <div class="ad-bar" id="adBar">
-  <!-- Slot 1: 手機版 320x50（跨域 iframe 載入，無法跳轉） -->
+  <!-- Slot 1: 手機版 320x50（sandbox iframe，不跳轉） -->
   <div class="ad-slot active" id="adSlot1">
-    <iframe src="/api/ad-iframe"
-      style="width:320px;height:50px;border:none;overflow:hidden;display:block;margin:0 auto;background:transparent"
+    <iframe id="adFrame1"
+      style="width:320px;height:50px;border:none;overflow:hidden;display:block;margin:0 auto"
       sandbox="allow-scripts">
     </iframe>
+    <script>
+    fetch('/api/ad-iframe').then(r=>r.text()).then(html=>{
+      var f = document.getElementById('adFrame1');
+      if(f) f.srcdoc = html;
+    });
+    </script>
   </div>
   <!-- Slot 2: 桌機版 728x90（中間）→ 由 JS 動態注入，手機不載入 -->
   <div class="ad-slot" id="adSlot2">
