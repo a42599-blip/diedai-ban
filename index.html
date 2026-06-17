@@ -381,18 +381,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 
 <!-- ══ 廣告列（底部固定，預留最多3格）══ -->
 <div class="ad-bar" id="adBar">
-  <!-- Slot 1: 手機版 320x50（sandbox iframe，不跳轉） -->
+  <!-- Slot 1: 手機版 320x50（直接載入，但阻擋跳轉） -->
   <div class="ad-slot active" id="adSlot1">
-    <iframe id="adFrame1"
-      style="width:320px;height:50px;border:none;overflow:hidden;display:block;margin:0 auto"
-      sandbox="allow-scripts">
-    </iframe>
     <script>
-    fetch('/api/ad-iframe').then(r=>r.text()).then(html=>{
-      var f = document.getElementById('adFrame1');
-      if(f) f.srcdoc = html;
-    });
+      // 在廣告腳本載入前，攔截 popup 和 redirect
+      var _realOpen = window.open;
+      window.open = function(){ return null; };
+      document.addEventListener('click', function(e){
+        if(e.target.closest('.ad-bar, .ad-slot, [id^=adSlot]')){
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
     </script>
+    <script>
+      atOptions = {
+        'key' : '2f4c8115eed4bad1123d0f76fe5b8ec2',
+        'format' : 'iframe',
+        'height' : 50,
+        'width' : 320,
+        'params' : {}
+      };
+    </script>
+    <script src="https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js"></script>
   </div>
   <!-- Slot 2: 桌機版 728x90（中間）→ 由 JS 動態注入，手機不載入 -->
   <div class="ad-slot" id="adSlot2">
