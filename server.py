@@ -18,6 +18,27 @@ import uvicorn
 
 BASE_DIR          = Path(__file__).parent
 DOWNLOAD_DIR      = BASE_DIR / "下載影片"
+
+# ── JS Runtime 偵測（yt-dlp 需要來解 YouTube 機器人驗證）───────
+_JS_RUNTIME = None
+for _rt, _paths in [
+    ("deno", [shutil.which("deno"), r"C:\Users\USER\AppData\Local\deno\bin\deno.exe", r"/usr/local/bin/deno"]),
+    ("node", [shutil.which("node")]),
+]:
+    for _p in _paths:
+        if _p and os.path.isfile(_p):
+            _JS_RUNTIME = f"{_rt}:{_p}"
+            print(f"[startup] JS runtime 可用: {_JS_RUNTIME}")
+            break
+    if _JS_RUNTIME:
+        break
+_YT_OPTS_EXTRA = {}
+if _JS_RUNTIME:
+    _YT_OPTS_EXTRA = {"js_runtimes": [_JS_RUNTIME], "remote_components": ["ejs:github"]}
+else:
+    print("[startup] ⚠️ 未找到 JS runtime（deno/node），YouTube 解析可能不完整")
+    print("[startup]   請安裝 Deno: https://deno.land/#installation")
+
 COOKIES_FILE      = BASE_DIR / "platform_cookies.json"
 DOWNLOAD_REGISTRY = DOWNLOAD_DIR / ".download_registry.json"
 _reg_lock         = threading.Lock()
@@ -1472,9 +1493,10 @@ async def video_info(url: str):
             "quiet": True, "no_warnings": True, "skip_download": True,
             "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
         }
-        # YouTube：Android 客戶端備用（Invidious 已優先嘗試）
+        # YouTube：Android 客戶端備用 + Deno JS runtime 解驗證
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": "all"}}
+            opts.update(_YT_OPTS_EXTRA)
             # 加入公開 YouTube cookies
             try:
                 import httpx as _httpx
@@ -2318,7 +2340,8 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
-                   "extractor_args":{"youtube":{"player_client":"all"}}}
+                   "extractor_args":{"youtube":{"player_client":"all"}},
+                   **_YT_OPTS_EXTRA}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
