@@ -22,7 +22,7 @@ DOWNLOAD_DIR      = BASE_DIR / "下載影片"
 # ── yt-dlp EJS（External JavaScript Solver）設定 ───────
 # 讓 yt-dlp 能下載並使用 JS 解 YouTube 機器人驗證
 # js_runtimes 預設就是 {"deno": {}}（yt-dlp 自己會找），不需要手動傳
-_YT_OPTS_EXTRA = {"remote_components": ["ejs:github"]}
+_YT_OPTS_EXTRA = {}
 
 COOKIES_FILE      = BASE_DIR / "platform_cookies.json"
 DOWNLOAD_REGISTRY = DOWNLOAD_DIR / ".download_registry.json"
@@ -1482,28 +1482,25 @@ async def video_info(url: str):
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": "all"}}
             opts.update(_YT_OPTS_EXTRA)
-            # 加入 YouTube cookies（優先：環境變數 → httpx 即時抓 → 寫死備援）
+            # 加入 YouTube cookies（優先：寫死備援 → env var 覆蓋 → httpx 補缺）
             try:
-                _yt_cookies = {}
-                # 1) Railway 環境變數（可讓 admin 隨時更新）
+                # 基底：寫死備援（更新日期：2026-06-18 即時 curl 取得）
+                _yt_cookies = {"VISITOR_INFO1_LIVE":"wIbHeuFN78o","YSC":"djtinud7w_0","GPS":"1","__Secure-ROLLOUT_TOKEN":"CN3ci9XX-77wzAEQpofRyIePlQMYpofRyIePlQM=","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgaQ==","__Secure-YNID":"19.YT=ArqwFg-Li7_-h56nspj-IopdxP5vDoay60zDYHoRXbB-CVbT6jl9pUDT2CuSees9uOEN1wYlnSwkKXfY4r7ITowsEsw0gFBdOs-ikwdSNsm0nK0FPvs4RjAdAbSxJHy03FFmS_hoGRpAalBWqgxwiFhp14t9hyBRz6Ubu8BQ_a8aJ2HcicpbDK9vczYMXfyaswh9F_QTzpFHyOLZIJTYvsjEaKbWVBC4A-Q2CHY9Mzi6czQyhTf_MQR9wfpYoDgBPxklZRKtXopxCrqYBdmyTU7w3qVYabEPAH_nZgOopInvAV-dCBg0h-XEDMY3gdMGNWb0697mb1l91BYvyK58Zw"}
+                # 1) Railway 環境變數（最高優先，可讓 admin 隨時更新）
                 _yt_env = os.environ.get("YT_COOKIES_JSON", "")
                 if _yt_env:
                     try:
                         _yt_cookies.update(json.loads(_yt_env))
                     except Exception:
                         pass
-                # 2) 即時抓 youtube.com
+                # 2) 即時抓 youtube.com（只補缺，不覆蓋已有值）
                 try:
                     import httpx as _httpx
                     _r = _httpx.get("https://www.youtube.com/", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-                    _yt_cookies.update(dict(_r.cookies))
+                    for _k, _v in dict(_r.cookies).items():
+                        _yt_cookies.setdefault(_k, _v)
                 except Exception:
                     pass
-                # 3) 寫死備援（更新日期：2026-06-18）
-                # ⚠️ 用 = 直接覆蓋，確保 httpx 回傳不完整時 fallback 一定生效
-                _fallback = {"VISITOR_INFO1_LIVE":"ssNJv6cvrMo","YSC":"-dgl52E-VV0","GPS":"1","__Secure-ROLLOUT_TOKEN":"CPrTkr2yoKDtahD87Pi4ho-VAxj87Pi4ho-VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgTQ==","__Secure-YNID":"19.YT=QrivykBZtH5AsYRa5Ykh0lumqUnHb1x7rZIkSYEg3qb7Xs1MlEYyAyfKBILJUIJGgh4uGgic8b6el1hYn70diZPtzFyViSO_5weJL26yGXVal5IxSEJqVxCZo2NZYsTmSlM8BJS7j2KzkV-fCchHbNxLcLsPzlMRMozCiAU8VZ53_6za7n8GFFAEOsm9AnVJ-s5yE_dnmq-u5LmOP0yiGWPDxpa6rkPnmoxXV6fhUsye6QOC7pb2AJz6-YlRZc0NMaSmZ5GNsSxDfr_VJ9XEFASSER_S6tUPS5ERgumVnRC6a_wppiikKYIGEgL6PltQ9CGpaCc8OOuR18vpV7h3gA"}
-                for _k, _v in _fallback.items():
-                    _yt_cookies[_k] = _v
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
