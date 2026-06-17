@@ -381,18 +381,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 
 <!-- ══ 廣告列（底部固定，預留最多3格）══ -->
 <div class="ad-bar" id="adBar">
-  <!-- Slot 1: 手機版 320x50 -->
+  <!-- Slot 1: 手機版 320x50 — 暫時移除（Adsterra 會做 popunder，等後台改為純 Banner 後再啟用） -->
   <div class="ad-slot active" id="adSlot1">
-    <script>
-      atOptions = {
-        'key' : '2f4c8115eed4bad1123d0f76fe5b8ec2',
-        'format' : 'iframe',
-        'height' : 50,
-        'width' : 320,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js"></script>
   </div>
   <!-- Slot 2: 桌機版 728x90（中間）→ 由 JS 動態注入，手機不載入 -->
   <div class="ad-slot" id="adSlot2">
