@@ -1506,7 +1506,7 @@ async def video_info(url: str):
                 except:
                     _yt_cookies = {}
                 # 永遠用最新的 fallback cookies 覆蓋關鍵值，避免 httpx 抓到不完整的 cookies
-                _fallback_yt = {"VISITOR_INFO1_LIVE":"L7Zy9ixpCzc","YSC":"HWFEnNG_EvM","GPS":"1","__Secure-ROLLOUT_TOKEN":"CLr8rO6Tm5zIJhDltI2koo6VAxjltI2koo6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgag=="}
+                _fallback_yt = {"VISITOR_INFO1_LIVE":"aMV4Lt9qBuk","YSC":"lbo4rThCJLY","GPS":"1","__Secure-ROLLOUT_TOKEN":"COCBgfGtqo3TMhCo94vDqI6VAxio94vDqI6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgWA==","__Secure-YNID":"19.YT=a6WOHeRQgY9xb8L-Ngr7lQCFy6cPYUaAkpLunpY_olCRB6WR_iv0Mn_vH-GW6LYuzAu3LWlHcGZTlbsDb-jtEVb8hjoFpCpYU52QpCZ0j44SXS33j__hTEi4q03saG-B6-Tuldt9dnP9fcuR4MD6sIZPfsCdymcwZd64ozyrHKBzfX-PqkUjtOiAy3qa94RKnqdIqHc_f34twEkhMUIF45H65RrNR5OiyMjUTRyPLYtod3BQd0vEaLoOay_5rwpPVrLbRJfoZZnaa6AQd9wbuyYxJvSkQRx84HGObXdMH5j6VKe9aV1Cg0dvy88-L_tce17pBMLosjhXJ4HKGqON9A"}
                 for _k, _v in _fallback_yt.items():
                     _yt_cookies[_k] = _v
                 if _yt_cookies:
