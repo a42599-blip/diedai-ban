@@ -1477,7 +1477,7 @@ async def video_info(url: str):
                 except:
                     _yt_cookies = {}
                 # 永遠用最新的 fallback cookies 覆蓋關鍵值，避免 httpx 抓到不完整的 cookies
-                _fallback_yt = {"VISITOR_INFO1_LIVE":"3W0UoY7-FjU","YSC":"VdGZz33vUQo","GPS":"1","__Secure-ROLLOUT_TOKEN":"CJzXz4PXr___iAEQq_2i85yOlQMYq_2i85yOlQM=","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgQA="}
+                _fallback_yt = {"VISITOR_INFO1_LIVE":"veMBAAq89Vo","YSC":"kBz5zrwAfTc","GPS":"1","__Secure-ROLLOUT_TOKEN":"CP-0z7iUloXbMRCSzp_ino6VAxiSzp_ino6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgQQ="}
                 for _k, _v in _fallback_yt.items():
                     _yt_cookies[_k] = _v
                 if _yt_cookies:
