@@ -1482,27 +1482,27 @@ async def video_info(url: str):
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": "all"}}
             opts.update(_YT_OPTS_EXTRA)
-            # 加入 YouTube cookies（優先：環境變數 → httpx 即時抓）
+            # 加入 YouTube cookies（優先：環境變數 → httpx 即時抓 → 寫死備援）
             try:
                 _yt_cookies = {}
-                # 1) 從 Railway 環境變數 YT_COOKIES_JSON 讀（admin 在後台設定最新值）
+                # 1) Railway 環境變數（可讓 admin 隨時更新）
                 _yt_env = os.environ.get("YT_COOKIES_JSON", "")
                 if _yt_env:
                     try:
                         _yt_cookies.update(json.loads(_yt_env))
-                        print(f"[youtube_cookies] 從環境變數讀取 {len(_yt_cookies)} 個 cookies")
-                    except Exception as _ex:
-                        print(f"[youtube_cookies] 環境變數解析失敗: {_ex}")
-                # 2) 再嘗試從 youtube.com 即時抓（本機開發用）
+                    except Exception:
+                        pass
+                # 2) 即時抓 youtube.com
                 try:
                     import httpx as _httpx
                     _r = _httpx.get("https://www.youtube.com/", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-                    _live = dict(_r.cookies)
-                    if _live:
-                        _yt_cookies.update(_live)
-                        print(f"[youtube_cookies] 從 youtube.com 補抓 {len(_live)} 個 cookies")
+                    _yt_cookies.update(dict(_r.cookies))
                 except Exception:
                     pass
+                # 3) 寫死備援（更新日期：2026-06-17 20:43）
+                _fallback = {"VISITOR_INFO1_LIVE":"aMV4Lt9qBuk","YSC":"lbo4rThCJLY","GPS":"1","__Secure-ROLLOUT_TOKEN":"COCBgfGtqo3TMhCo94vDqI6VAxio94vDqI6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgWA==","__Secure-YNID":"19.YT=a6WOHeRQgY9xb8L-Ngr7lQCFy6cPYUaAkpLunpY_olCRB6WR_iv0Mn_vH-GW6LYuzAu3LWlHcGZTlbsDb-jtEVb8hjoFpCpYU52QpCZ0j44SXS33j__hTEi4q03saG-B6-Tuldt9dnP9fcuR4MD6sIZPfsCdymcwZd64ozyrHKBzfX-PqkUjtOiAy3qa94RKnqdIqHc_f34twEkhMUIF45H65RrNR5OiyMjUTRyPLYtod3BQd0vEaLoOay_5rwpPVrLbRJfoZZnaa6AQd9wbuyYxJvSkQRx84HGObXdMH5j6VKe9aV1Cg0dvy88-L_tce17pBMLosjhXJ4HKGqON9A"}
+                for _k, _v in _fallback.items():
+                    _yt_cookies.setdefault(_k, _v)
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
@@ -1511,7 +1511,6 @@ async def video_info(url: str):
                         _ck.write(f".youtube.com\tTRUE\t/\tTRUE\t0\t{_n}\t{_v}\n")
                     _ck.close()
                     opts["cookiefile"] = _ck.name
-                    print(f"[youtube_cookies] 共用 {len(_yt_cookies)} 個 cookies 寫入暫存檔")
             except Exception as _ex:
                 print(f"[youtube_cookies] {_ex}")
         import tempfile, os as _os
