@@ -1,8 +1,9 @@
 # 🚨 v8i8.com YouTube 故障修復 SOP（永久記憶）
 
-> 最後更新：2026-06-18
+> 最後更新：2026-06-18 v2（加入 v1.4 穩定版 + 鎖版本方式修正）
 > ⚠️ **YouTube 是唯一會自己壞掉的平台**（即使沒人動任何東西）
 > ⚠️ **每次 YouTube 壞掉，先讀這份 SOP，照步驟做**
+> **🎯 v1.4 穩定版：** commit `a72d462` / tag `v1.4` / Railway deployment `8f582724`
 
 ---
 
@@ -22,28 +23,32 @@ HTTP Error 403
 ### 2026-06-18 這次（最新經驗）
 **沒人動任何東西，YouTube 自己壞掉。** 原因不是 cookies 過期：
 
-| # | 問題 | 說明 |
-|:-:|:----|:------|
-| 1 | ❌ `remote_components: ["ejs:github"]` | 讓 yt-dlp 去 GitHub 下載 JS 腳本，下載失敗或限流時卡住 |
-| 2 | ❌ 沒有明確指定 Deno JS runtime | yt-dlp 號稱會自動偵測，但 Railway 上不一定抓到 |
-| 3 | ❌ 沒有重試機制 | 雲端 IP 打 YouTube 第一次失敗就放棄，不重試 |
-| 4 | ❌ yt-dlp 鎖在舊版 `2026.3.17` | 新版才有最新繞過機制 |
-
-### 2026-06-16/17 之前的經驗
-| # | 問題 | 說明 |
-|:-:|:----|:------|
-| 5 | ❌ TV 客戶端有 DRM | `tv/tv_embedded` 會被 YouTube A/B 測試啟用 DRM |
-| 6 | ❌ cookies fallback 被 httpx 蓋掉 | httpx 在 Railway 上永遠成功但回傳不完整 cookies |
-| 7 | ❌ 用了私人 cookies | 公共服務不能用，且 cookies 會過期 |
+| # | 問題 | 說明 | 發現日 |
+|:-:|:----|:------|:-----:|
+| 1 | ❌ yt-dlp 鎖在 requirements.txt 不是 Dockerfile | Railway pip 不吃 requirements.txt 的版本鎖定，部署會失敗 | **6/18** |
+| 2 | ❌ `remote_components: ["ejs:github"]` | 讓 yt-dlp 去 GitHub 下載 JS 腳本，下載失敗或限流時卡住 | 6/18 |
+| 3 | ❌ 沒有明確指定 Deno JS runtime | yt-dlp 號稱會自動偵測，但 Railway 上不一定抓到 | 6/18 |
+| 4 | ❌ 沒有重試機制 | 雲端 IP 打 YouTube 第一次失敗就放棄，不重試 | 6/18 |
+| 5 | ❌ TV 客戶端有 DRM | `tv/tv_embedded` 會被 YouTube A/B 測試啟用 DRM | 6/16 |
+| 6 | ❌ cookies fallback 被 httpx 蓋掉 | httpx 在 Railway 上永遠成功但回傳不完整 cookies | 6/17 |
+| 7 | ❌ 用了私人 cookies | 公共服務不能用，且 cookies 會過期 | 6/18 |
 
 ## 三、修復方法（照順序做，不要跳步）
 
-### Step 1：確認 yt-dlp 版本沒被鎖
+### Step 1：確認 yt-dlp 鎖定方式正確
+
+**重要：yt-dlp 不能鎖在 requirements.txt，必須鎖在 Dockerfile！**
+
+檢查 `Dockerfile`：
+```
+✅ pip install -r requirements.txt yt-dlp==2026.6.9   ← 正確（鎖在 Dockerfile）
+❌ requirements.txt 中有 yt-dlp==xxx                 ← 錯誤，Railway 會部署失敗
+```
 
 檢查 `requirements.txt`：
 ```
-✅ yt-dlp           ← 正確（沒鎖版本）
-❌ yt-dlp==2026.3.17 ← 錯誤，要解鎖
+✅ 沒有 yt-dlp 這行（yt-dlp 由 Dockerfile 管理）
+❌ 有 yt-dlp 或 yt-dlp==xxx                       ← 移除，交給 Dockerfile 鎖
 ```
 
 ### Step 2：確認 `_YT_OPTS_EXTRA` 設定正確
@@ -114,22 +119,28 @@ curl -sL "https://v8i8.com/api/video-info?url=https://www.youtube.com/watch?v=jN
 
 ## 四、如果 Step 1~6 都做了還是壞
 
-### 情況 A：可能是 yt-dlp 最新版有 bug
-解法：暫時鎖定到本機測試能用的版本（目前本機是 2026.06.09）
+### 情況 A：可能是 yt-dlp 版本問題
+解法：滾回 v1.4 穩定版
 ```bash
-# 在 requirements.txt 寫：
-yt-dlp==2026.06.09
-```
-
-### 情況 B：可能是 Railway 環境問題
-解法：滾回穩定版標籤
-```bash
-git checkout v1.2-stable
+cd D:/pi-agent/diedai-ban-work
+git checkout v1.4
 git push origin master --force
 ```
 
-### 情況 C：真的不知道為什麼
-解法：完整診斷，加暫時的 debug log 看 yt-dlp 實際報錯
+**v1.4 資訊：**
+- GitHub commit: `a72d462`
+- GitHub tag: `v1.4`
+- Railway deployment ID: `8f582724-a6d6-47c4-9829-2abc3e461c82`
+- Railway deployment 名稱: `a72d462 - chore: 重新部署測試 YouTube 狀態`
+- Image digest: `sha256:11f4333e01be165dc6bc716721eee0a2c1cc3d86a5351b9e0a94b37e060b530b`
+
+### 情況 B：滾回 v1.4 也不行
+解法：手動在 Railway Dashboard 找到 deployment `8f582724` 按 Redeploy
+這會直接用同一個 Docker image 重啟，不會重新 build。
+
+### 情況 C：手動 Redeploy 也不行
+解法：環境變數（Railway base image 更新、Deno 版本變動等）
+需要進一步診斷
 
 ## 五、進階：環境變數備援
 
