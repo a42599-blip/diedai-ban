@@ -1487,33 +1487,21 @@ async def video_info(url: str):
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": "all"}}
             opts.update(_YT_OPTS_EXTRA)
-            # 每次請求從 Railway httpx 抓匿名 cookies（不綁任何私人帳號）
+            # 讓 yt-dlp 自己管理 cookies，不傳 Railway httpx 抓的（雲端 IP cookies 反而干擾）
+            # 只有緊急時可設 YT_COOKIES_JSON 環境變數
             try:
-                _yt_cookies = {}
-                # 1) Railway 環境變數（緊急備用，平常不要設）
                 _yt_env = os.environ.get("YT_COOKIES_JSON", "")
                 if _yt_env:
-                    try:
-                        _yt_cookies.update(json.loads(_yt_env))
-                    except Exception:
-                        pass
-                # 2) 即時抓 youtube.com 匿名 cookies
-                try:
-                    import httpx as _httpx
-                    _r = _httpx.get("https://www.youtube.com/",
-                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                        timeout=10, follow_redirects=True)
-                    _yt_cookies.update(dict(_r.cookies))
-                except Exception:
-                    pass
-                if _yt_cookies:
-                    import tempfile as _tf
-                    _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
-                    _ck.write("# Netscape HTTP Cookie File\n")
-                    for _n, _v in _yt_cookies.items():
-                        _ck.write(f".youtube.com\tTRUE\t/\tTRUE\t0\t{_n}\t{_v}\n")
-                    _ck.close()
-                    opts["cookiefile"] = _ck.name
+                    import json as _json
+                    _yt_cookies = _json.loads(_yt_env)
+                    if _yt_cookies:
+                        import tempfile as _tf
+                        _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
+                        _ck.write("# Netscape HTTP Cookie File\n")
+                        for _n, _v in _yt_cookies.items():
+                            _ck.write(f".youtube.com\tTRUE\t/\tTRUE\t0\t{_n}\t{_v}\n")
+                        _ck.close()
+                        opts["cookiefile"] = _ck.name
             except Exception as _ex:
                 print(f"[youtube_cookies] {_ex}")
         import tempfile, os as _os
