@@ -1476,8 +1476,10 @@ async def video_info(url: str):
                     _yt_cookies = dict(_r.cookies)
                 except:
                     _yt_cookies = {}
-                if not _yt_cookies:
-                    _yt_cookies = {"VISITOR_INFO1_LIVE":"OJKgM4VXT4E","YSC":"n-OCQUBYaaM","GPS":"1","__Secure-ROLLOUT_TOKEN":"CKzA7r2Xn-PPbxD24OPFiI6VAxj24OPFiI6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgQg="}
+                # 永遠用最新的 fallback cookies 覆蓋關鍵值，避免 httpx 抓到不完整的 cookies
+                _fallback_yt = {"VISITOR_INFO1_LIVE":"OJKgM4VXT4E","YSC":"n-OCQUBYaaM","GPS":"1","__Secure-ROLLOUT_TOKEN":"CKzA7r2Xn-PPbxD24OPFiI6VAxj24OPFiI6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgQg="}
+                for _k, _v in _fallback_yt.items():
+                    _yt_cookies[_k] = _v
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
