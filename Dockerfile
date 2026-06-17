@@ -17,7 +17,7 @@ WORKDIR /app
 # 安裝 Python 依賴
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt yt-dlp==2026.6.9
 
 # 安裝 Playwright Chromium
 RUN playwright install chromium --with-deps
