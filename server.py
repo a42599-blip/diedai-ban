@@ -1133,6 +1133,12 @@ async def _download_from_cdn(cdn_url: str, out_dir: Path, title: str,
 
 
 # ── 首頁 ──────────────────────────────────────────────────
+@app.get("/ads.txt")
+def ads_txt():
+    return FileResponse(str(BASE_DIR / "ads.txt"),
+                        media_type="text/plain",
+                        headers={"Cache-Control": "no-store"})
+
 @app.get("/")
 def index():
     return FileResponse(str(BASE_DIR / "index.html"),
