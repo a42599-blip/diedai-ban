@@ -1482,23 +1482,21 @@ async def video_info(url: str):
         if "youtube.com" in real_url or "youtu.be" in real_url:
             opts["extractor_args"] = {"youtube": {"player_client": "all"}}
             opts.update(_YT_OPTS_EXTRA)
-            # 加入 YouTube cookies（優先：寫死備援 → env var 覆蓋 → httpx 補缺）
+            # 加入 YouTube cookies（每次請求從 youtube.com 抓匿名 cookies，不用私人 cookies）
             try:
-                # 基底：寫死備援（更新日期：2026-06-18 即時 curl 取得）
-                _yt_cookies = {"VISITOR_INFO1_LIVE":"oy8A6REgIxU","YSC":"kSHX_dr6kqk","GPS":"1","__Secure-ROLLOUT_TOKEN":"CKichM36x4eytQEQsv7I_oiPlQMYsv7I_oiPlQM=","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgKA==","__Secure-YNID":"19.YT=HKGJda6bYe1XRloHkdmMAUhZIy2PfN7FbLsX2DHJOZetg7wNTft4e8hRlKCPJxfo5gtGkZTnN-qpHVV_kdnEvAkBi7Kk_NUdvpsoMaYmbzKFtTXdGQFJMzXCUaafyT6PALla7qAlfLZ4PBuKg2LxIu74gzZcLtFHQimq5kuoEEm4chtsuerINz6nnQRP1KBrz16oRKCTRzryRYi8Kr0Vs5SdDy-p9WMwQJep-2RJJNonQMBINEaP9LVD1R6zaCPButet9WndeqB3FdqSv5aM9XW1xG1bcot0CGyTPpuFXXPS75m0dNu2IJ19Cr_z17lJ8oM-wCSFa0obax1rhbfm7Q"}
-                # 1) Railway 環境變數（最高優先，可讓 admin 隨時更新）
+                _yt_cookies = {}
+                # 1) Railway 環境變數（可讓 admin 隨時更新，非常時期才用）
                 _yt_env = os.environ.get("YT_COOKIES_JSON", "")
                 if _yt_env:
                     try:
                         _yt_cookies.update(json.loads(_yt_env))
                     except Exception:
                         pass
-                # 2) 即時抓 youtube.com（只補缺，不覆蓋已有值）
+                # 2) 即時抓 youtube.com 匿名 cookies（每次請求最新，不綁私人帳號）
                 try:
                     import httpx as _httpx
                     _r = _httpx.get("https://www.youtube.com/", headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-                    for _k, _v in dict(_r.cookies).items():
-                        _yt_cookies.setdefault(_k, _v)
+                    _yt_cookies.update(dict(_r.cookies))
                 except Exception:
                     pass
                 if _yt_cookies:
