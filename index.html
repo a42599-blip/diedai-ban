@@ -364,16 +364,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 <div class="ad-right" id="adRight">
   <button class="ad-close" onclick="document.getElementById('adRight').style.display='none'">✕</button>
   <script>
-  (function(lsm){
-  var d = document,
-      s = d.createElement('script'),
-      l = d.scripts[d.scripts.length - 1];
-  s.settings = lsm || {};
-  s.src = "\/\/massivesalad.com\/beX_Vpshd.GPlF0NYxW_c_\/yeim\/9buCZhUtlmkNPkTuc\/xKNeD\/ME3zNMz\/cntONhzFET0RMzzPc\/4nMZQI";
-  s.async = true;
-  s.referrerPolicy = 'no-referrer-when-downgrade';
-  l.parentNode.insertBefore(s, l);
-  })({})
+  // 只限桌機載入（手機完全不載入，避免強制跳轉廣告頁）
+  if (window.innerWidth >= 1200) {
+    (function(lsm){
+    var d = document,
+        s = d.createElement('script'),
+        l = d.scripts[d.scripts.length - 1];
+    s.settings = lsm || {};
+    s.src = "\/\/massivesalad.com\/beX_Vpshd.GPlF0NYxW_c_\/yeim\/9buCZhUtlmkNPkTuc\/xKNeD\/ME3zNMz\/cntONhzFET0RMzzPc\/4nMZQI";
+    s.async = true;
+    s.referrerPolicy = 'no-referrer-when-downgrade';
+    l.parentNode.insertBefore(s, l);
+    })({});
+  }
   </script>
 </div>
 
