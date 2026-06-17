@@ -1477,7 +1477,7 @@ async def video_info(url: str):
                 except:
                     _yt_cookies = {}
                 if not _yt_cookies:
-                    _yt_cookies = {"VISITOR_INFO1_LIVE":"spsVyPuBEu0","YSC":"ZrKtopkZD3s","GPS":"1"}
+                    _yt_cookies = {"VISITOR_INFO1_LIVE":"pTCCy-3WwII","YSC":"CSa2lAJrVzw","GPS":"1"}
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
