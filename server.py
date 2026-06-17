@@ -1133,12 +1133,6 @@ async def _download_from_cdn(cdn_url: str, out_dir: Path, title: str,
 
 
 # ── 首頁 ──────────────────────────────────────────────────
-@app.get("/ads.txt")
-def ads_txt():
-    return FileResponse(str(BASE_DIR / "ads.txt"),
-                        media_type="text/plain",
-                        headers={"Cache-Control": "no-store"})
-
 @app.get("/")
 def index():
     return FileResponse(str(BASE_DIR / "index.html"),
@@ -1473,7 +1467,7 @@ async def video_info(url: str):
         }
         # YouTube：Android 客戶端備用（Invidious 已優先嘗試）
         if "youtube.com" in real_url or "youtu.be" in real_url:
-            opts["extractor_args"] = {"youtube": {"player_client": ["ios", "android", "android_embedded", "web"]}}
+            opts["extractor_args"] = {"youtube": {"player_client": ["ios", "android", "android_embedded", "tv", "tv_embedded", "web"]}}
             # 加入公開 YouTube cookies
             try:
                 import httpx as _httpx
@@ -1483,7 +1477,7 @@ async def video_info(url: str):
                 except:
                     _yt_cookies = {}
                 if not _yt_cookies:
-                    _yt_cookies = {"VISITOR_INFO1_LIVE":"aemo-P5IiI8","YSC":"kV4CNUdC6sY","GPS":"1"}
+                    _yt_cookies = {"VISITOR_INFO1_LIVE":"spsVyPuBEu0","YSC":"ZrKtopkZD3s","GPS":"1"}
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
@@ -2315,7 +2309,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
-                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","web"]}}
+                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","tv","tv_embedded","web"]}}}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
