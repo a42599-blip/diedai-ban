@@ -19,25 +19,10 @@ import uvicorn
 BASE_DIR          = Path(__file__).parent
 DOWNLOAD_DIR      = BASE_DIR / "下載影片"
 
-# ── JS Runtime 偵測（yt-dlp 需要來解 YouTube 機器人驗證）───────
-_JS_RUNTIME = None
-for _rt, _paths in [
-    ("deno", [shutil.which("deno"), r"C:\Users\USER\AppData\Local\deno\bin\deno.exe", r"/usr/local/bin/deno"]),
-    ("node", [shutil.which("node")]),
-]:
-    for _p in _paths:
-        if _p and os.path.isfile(_p):
-            _JS_RUNTIME = f"{_rt}:{_p}"
-            print(f"[startup] JS runtime 可用: {_JS_RUNTIME}")
-            break
-    if _JS_RUNTIME:
-        break
-_YT_OPTS_EXTRA = {}
-if _JS_RUNTIME:
-    _YT_OPTS_EXTRA = {"js_runtimes": [_JS_RUNTIME], "remote_components": ["ejs:github"]}
-else:
-    print("[startup] ⚠️ 未找到 JS runtime（deno/node），YouTube 解析可能不完整")
-    print("[startup]   請安裝 Deno: https://deno.land/#installation")
+# ── yt-dlp EJS（External JavaScript Solver）設定 ───────
+# 讓 yt-dlp 能下載並使用 JS 解 YouTube 機器人驗證
+# js_runtimes 預設就是 {"deno": {}}（yt-dlp 自己會找），不需要手動傳
+_YT_OPTS_EXTRA = {"remote_components": ["ejs:github"]}
 
 COOKIES_FILE      = BASE_DIR / "platform_cookies.json"
 DOWNLOAD_REGISTRY = DOWNLOAD_DIR / ".download_registry.json"
