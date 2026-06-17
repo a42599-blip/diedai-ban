@@ -156,6 +156,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 /* ══ TOAST ══ */
 .toast{position:fixed;top:12px;right:12px;background:#059669;color:#fff;padding:8px 14px;border-radius:8px;font-size:0.8rem;z-index:999;animation:fi .3s;max-width:280px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 
+/* ══ 右側廣告（HilltopAds 300x250，只限桌機）══ */
+.ad-right{position:fixed;right:12px;top:50%;transform:translateY(-50%);z-index:50;width:300px;display:none}
+@media(min-width:1200px){.ad-right{display:block}}
+.ad-right .ad-close{position:absolute;top:-18px;right:0;background:#0d2420;border:1px solid #1a3a38;color:#5a8a84;border-radius:4px 4px 0 0;padding:1px 8px;font-size:0.6rem;cursor:pointer;line-height:1.4}
+.ad-right .ad-close:hover{color:#99f6e4}
+
 /* ══ 廣告列（底部固定）══ */
 .ad-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,13,12,.96);border-top:1px solid #0d2420;padding:4px 8px;display:flex;justify-content:center;align-items:center;gap:4px;backdrop-filter:blur(8px);min-height:50px}
 .ad-slot{flex:1;max-width:320px;display:none;justify-content:center;align-items:center;min-height:50px}
@@ -347,6 +353,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <span id="dl-msg">準備中...</span>
     <span id="dl-pct">0%</span>
   </div>
+</div>
+
+<!-- ══ 右側廣告（HilltopAds 300x250，僅桌機）══ -->
+<div class="ad-right" id="adRight">
+  <button class="ad-close" onclick="document.getElementById('adRight').style.display='none'">✕</button>
+  <script>
+  (function(lsm){
+  var d = document,
+      s = d.createElement('script'),
+      l = d.scripts[d.scripts.length - 1];
+  s.settings = lsm || {};
+  s.src = "\/\/massivesalad.com\/beX_Vpshd.GPlF0NYxW_c_\/yeim\/9buCZhUtlmkNPkTuc\/xKNeD\/ME3zNMz\/cntONhzFET0RMzzPc\/4nMZQI";
+  s.async = true;
+  s.referrerPolicy = 'no-referrer-when-downgrade';
+  l.parentNode.insertBefore(s, l);
+  })({})
+  </script>
 </div>
 
 <!-- ══ 廣告列（底部固定，預留最多3格）══ -->
