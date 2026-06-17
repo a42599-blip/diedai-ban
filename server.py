@@ -1499,10 +1499,11 @@ async def video_info(url: str):
                     _yt_cookies.update(dict(_r.cookies))
                 except Exception:
                     pass
-                # 3) 寫死備援（更新日期：2026-06-17 20:43）
-                _fallback = {"VISITOR_INFO1_LIVE":"aMV4Lt9qBuk","YSC":"lbo4rThCJLY","GPS":"1","__Secure-ROLLOUT_TOKEN":"COCBgfGtqo3TMhCo94vDqI6VAxio94vDqI6VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgWA==","__Secure-YNID":"19.YT=a6WOHeRQgY9xb8L-Ngr7lQCFy6cPYUaAkpLunpY_olCRB6WR_iv0Mn_vH-GW6LYuzAu3LWlHcGZTlbsDb-jtEVb8hjoFpCpYU52QpCZ0j44SXS33j__hTEi4q03saG-B6-Tuldt9dnP9fcuR4MD6sIZPfsCdymcwZd64ozyrHKBzfX-PqkUjtOiAy3qa94RKnqdIqHc_f34twEkhMUIF45H65RrNR5OiyMjUTRyPLYtod3BQd0vEaLoOay_5rwpPVrLbRJfoZZnaa6AQd9wbuyYxJvSkQRx84HGObXdMH5j6VKe9aV1Cg0dvy88-L_tce17pBMLosjhXJ4HKGqON9A"}
+                # 3) 寫死備援（更新日期：2026-06-18）
+                # ⚠️ 用 = 直接覆蓋，確保 httpx 回傳不完整時 fallback 一定生效
+                _fallback = {"VISITOR_INFO1_LIVE":"ssNJv6cvrMo","YSC":"-dgl52E-VV0","GPS":"1","__Secure-ROLLOUT_TOKEN":"CPrTkr2yoKDtahD87Pi4ho-VAxj87Pi4ho-VAw==","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgTQ==","__Secure-YNID":"19.YT=QrivykBZtH5AsYRa5Ykh0lumqUnHb1x7rZIkSYEg3qb7Xs1MlEYyAyfKBILJUIJGgh4uGgic8b6el1hYn70diZPtzFyViSO_5weJL26yGXVal5IxSEJqVxCZo2NZYsTmSlM8BJS7j2KzkV-fCchHbNxLcLsPzlMRMozCiAU8VZ53_6za7n8GFFAEOsm9AnVJ-s5yE_dnmq-u5LmOP0yiGWPDxpa6rkPnmoxXV6fhUsye6QOC7pb2AJz6-YlRZc0NMaSmZ5GNsSxDfr_VJ9XEFASSER_S6tUPS5ERgumVnRC6a_wppiikKYIGEgL6PltQ9CGpaCc8OOuR18vpV7h3gA"}
                 for _k, _v in _fallback.items():
-                    _yt_cookies.setdefault(_k, _v)
+                    _yt_cookies[_k] = _v
                 if _yt_cookies:
                     import tempfile as _tf
                     _ck = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
