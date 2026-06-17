@@ -1485,7 +1485,7 @@ async def video_info(url: str):
             # 加入 YouTube cookies（優先：寫死備援 → env var 覆蓋 → httpx 補缺）
             try:
                 # 基底：寫死備援（更新日期：2026-06-18 即時 curl 取得）
-                _yt_cookies = {"VISITOR_INFO1_LIVE":"wIbHeuFN78o","YSC":"djtinud7w_0","GPS":"1","__Secure-ROLLOUT_TOKEN":"CN3ci9XX-77wzAEQpofRyIePlQMYpofRyIePlQM=","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgaQ==","__Secure-YNID":"19.YT=ArqwFg-Li7_-h56nspj-IopdxP5vDoay60zDYHoRXbB-CVbT6jl9pUDT2CuSees9uOEN1wYlnSwkKXfY4r7ITowsEsw0gFBdOs-ikwdSNsm0nK0FPvs4RjAdAbSxJHy03FFmS_hoGRpAalBWqgxwiFhp14t9hyBRz6Ubu8BQ_a8aJ2HcicpbDK9vczYMXfyaswh9F_QTzpFHyOLZIJTYvsjEaKbWVBC4A-Q2CHY9Mzi6czQyhTf_MQR9wfpYoDgBPxklZRKtXopxCrqYBdmyTU7w3qVYabEPAH_nZgOopInvAV-dCBg0h-XEDMY3gdMGNWb0697mb1l91BYvyK58Zw"}
+                _yt_cookies = {"VISITOR_INFO1_LIVE":"oy8A6REgIxU","YSC":"kSHX_dr6kqk","GPS":"1","__Secure-ROLLOUT_TOKEN":"CKichM36x4eytQEQsv7I_oiPlQMYsv7I_oiPlQM=","VISITOR_PRIVACY_METADATA":"CgJUVxIEGgAgKA==","__Secure-YNID":"19.YT=HKGJda6bYe1XRloHkdmMAUhZIy2PfN7FbLsX2DHJOZetg7wNTft4e8hRlKCPJxfo5gtGkZTnN-qpHVV_kdnEvAkBi7Kk_NUdvpsoMaYmbzKFtTXdGQFJMzXCUaafyT6PALla7qAlfLZ4PBuKg2LxIu74gzZcLtFHQimq5kuoEEm4chtsuerINz6nnQRP1KBrz16oRKCTRzryRYi8Kr0Vs5SdDy-p9WMwQJep-2RJJNonQMBINEaP9LVD1R6zaCPButet9WndeqB3FdqSv5aM9XW1xG1bcot0CGyTPpuFXXPS75m0dNu2IJ19Cr_z17lJ8oM-wCSFa0obax1rhbfm7Q"}
                 # 1) Railway 環境變數（最高優先，可讓 admin 隨時更新）
                 _yt_env = os.environ.get("YT_COOKIES_JSON", "")
                 if _yt_env:
@@ -1512,33 +1512,36 @@ async def video_info(url: str):
             except Exception as _ex:
                 print(f"[youtube_cookies] {_ex}")
         import tempfile, os as _os
-        cookies_list = _get_cookies_for_url(real_url)
         _tmp_cookie_file = None
-        if cookies_list:
-            try:
-                ck_lines = ["# Netscape HTTP Cookie File\n"]
-                for c in cookies_list:
-                    dom = c.get("domain","")
-                    if dom and not dom.startswith("."): dom = "." + dom
-                    ck_lines.append("\t".join([
-                        dom, "TRUE", c.get("path","/"),
-                        "TRUE" if c.get("secure") else "FALSE",
-                        str(int(c.get("expires",0) or 0)),
-                        c.get("name",""), c.get("value","")
-                    ]) + "\n")
-                tf = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
-                tf.writelines(ck_lines); tf.close()
-                opts["cookiefile"] = tf.name
-                _tmp_cookie_file = tf.name
-            except Exception:
-                pass
+        # ⚠️ YouTube 已經有專屬 cookies，不讓通用 cookie 蓋掉
+        if not ("youtube.com" in real_url or "youtu.be" in real_url):
+            cookies_list = _get_cookies_for_url(real_url)
+            if cookies_list:
+                try:
+                    ck_lines = ["# Netscape HTTP Cookie File\n"]
+                    for c in cookies_list:
+                        dom = c.get("domain","")
+                        if dom and not dom.startswith("."): dom = "." + dom
+                        ck_lines.append("\t".join([
+                            dom, "TRUE", c.get("path","/"),
+                            "TRUE" if c.get("secure") else "FALSE",
+                            str(int(c.get("expires",0) or 0)),
+                            c.get("name",""), c.get("value","")
+                        ]) + "\n")
+                    tf = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
+                    tf.writelines(ck_lines); tf.close()
+                    opts["cookiefile"] = tf.name
+                    _tmp_cookie_file = tf.name
+                except Exception:
+                    pass
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(real_url, download=False)
         finally:
             if _tmp_cookie_file:
                 try: _os.unlink(_tmp_cookie_file)
-                except Exception: pass
+                except Exception:
+                    pass
     try:
         info = await loop.run_in_executor(executor, _info)
         all_fmts = info.get("formats") or []
