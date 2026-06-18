@@ -2344,26 +2344,15 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if "youtube.com" in real_url or "youtu.be" in real_url:
         yield {"type":"progress","pct":5,"msg":"正在下載 YouTube 影片（Android 客戶端）..."}
         safe_yt = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_yt = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        opts_yt = {"format":"best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_yt}.%(ext)s"),"quiet":True,"no_warnings":True,
-                   "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":True,
-                   "embedmetadata":True,
-                   "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
+                   "concurrent_fragment_downloads":4,"updatetime":True,
                    "extractor_args":{"youtube":{"player_client":"all"}},
                    **_YT_OPTS_EXTRA}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
             _fp_yt = Path(res_yt[0])
-            # 重設檔案系統時間為現在（iOS 相簿用 modification time 排序）
-            try:
-                import time as _time_yt
-                _now = _time_yt.time()
-                _os_yt = __import__('os')
-                # 同時改 access time 和 modification time
-                _os_yt.utime(str(_fp_yt), (_now, _now))
-            except Exception:
-                pass
             yield {"type":"done","filename":_fp_yt.name,"saved_dir":str(out_dir),"size_mb":round(_fp_yt.stat().st_size/1024/1024,1)}
         else:
             yield {"type":"error","message":"YouTube 下載失敗（"+(err_yt[0] if err_yt else "未知錯誤")+"）"}
