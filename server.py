@@ -1481,7 +1481,12 @@ async def video_info(url: str):
         from urllib.parse import urlparse as _up
         opts = {
             "quiet": True, "no_warnings": True, "skip_download": True,
-            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+                         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                         "Accept-Language": "en-US,en;q=0.9",
+                         "Sec-Fetch-Dest": "document",
+                         "Sec-Fetch-Mode": "navigate",
+                         "Sec-Fetch-Site": "none"},
         }
         # YouTube：player_client=all + Deno JS runtime 解驗證
         if "youtube.com" in real_url or "youtu.be" in real_url:
