@@ -2349,7 +2349,8 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
-                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","web"]}}}
+                   "extractor_args":{"youtube":{"player_client":"all"}},
+                   **_YT_OPTS_EXTRA}}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
@@ -2360,7 +2361,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
 
     # ══ X (Twitter)：用目前時間取代原始上傳時間（iOS 相簿排序用）═══
     if "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url:
-        _fmt_x = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+        _fmt_x = "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best"
         opts_x = {"format": _fmt_x,
                 "outtmpl":str(out_dir/f"{safe}.%(ext)s"),"quiet":True,"no_warnings":True,
                 "merge_output_format":"mp4","concurrent_fragment_downloads":8,
