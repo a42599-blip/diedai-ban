@@ -1009,6 +1009,20 @@ loadDls();
   initDesktop();
   window.addEventListener('resize',initDesktop);
 })();
+
+/* ── 手機廣告防彈窗：定時移除覆蓋頁面的彈窗元素 ── */
+(function(){
+  if(window.innerWidth>=768)return; // 只限手機
+  setInterval(function(){
+    // 移除常見的彈窗/蓋版元素
+    var els = document.querySelectorAll('div[style*="position: fixed"][style*="z-index: 999"],div[style*="position: fixed"][style*="z-index: 9999"],iframe[style*="position: fixed"][style*="z-index: 999"]');
+    for(var i=0;i<els.length;i++){
+      if(els[i].id!=='adBar'&&els[i].id!=='dl-overlay'&&els[i].id!=='adSlot1'){
+        els[i].remove();
+      }
+    }
+  },2000);
+})();
 </script>
 </body>
 </html>
