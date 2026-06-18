@@ -2366,10 +2366,10 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
         # 格式：H264優先，若無則fallback到可用格式（解決直屏影片問題）
         opts_x = {"format":"best[ext=mp4]/best",
-                  "format_sort": ["vcodec:h264", "acodec:aac"],
                   "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),"quiet":True,"no_warnings":True,
                   "merge_output_format":"mp4","concurrent_fragment_downloads":8,
-                  "updatetime":False}
+                  "updatetime":False,
+                  "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]}}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
         if res_x and Path(res_x[0]).exists() and Path(res_x[0]).stat().st_size > 50000:
