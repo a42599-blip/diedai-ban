@@ -2350,7 +2350,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
                    "extractor_args":{"youtube":{"player_client":"all"}},
-                   **_YT_OPTS_EXTRA}}
+                   **_YT_OPTS_EXTRA}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
