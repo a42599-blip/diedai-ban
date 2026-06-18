@@ -2346,7 +2346,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         safe_yt = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
         opts_yt = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_yt}.%(ext)s"),"quiet":True,"no_warnings":True,
-                   "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
+                   "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":True,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
                    "extractor_args":{"youtube":{"player_client":"all"}},
@@ -2354,7 +2354,28 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
-            yield {"type":"done","filename":Path(res_yt[0]).name,"saved_dir":str(out_dir),"size_mb":round(Path(res_yt[0]).stat().st_size/1024/1024,1)}
+            _fp_yt = Path(res_yt[0])
+            # 用 ffmpeg 重設影片內部時間戳記為現在（iOS 相簿排序用）
+            try:
+                import subprocess as _sp_yt
+                from datetime import datetime as _dt_yt
+                _now_iso = _dt_yt.now().strftime('%Y-%m-%dT%H:%M:%S')
+                _tmp_yt = _fp_yt.with_suffix('.tmp.mp4')
+                _sp_yt.run(["ffmpeg", "-i", str(_fp_yt),
+                    "-map", "0", "-c", "copy",
+                    "-map_metadata", "-1",
+                    "-metadata", f"creation_time={_now_iso}",
+                    "-metadata", f"com.apple.quicktime.creationdate={_now_iso}",
+                    "-fflags", "+bitexact",
+                    "-flags:v", "+bitexact",
+                    "-flags:a", "+bitexact",
+                    str(_tmp_yt)], check=True, capture_output=True, timeout=30)
+                if _tmp_yt.exists() and _tmp_yt.stat().st_size > 50000:
+                    _os_yt = __import__('os')
+                    _os_yt.replace(str(_tmp_yt), str(_fp_yt))
+            except Exception:
+                pass
+            yield {"type":"done","filename":_fp_yt.name,"saved_dir":str(out_dir),"size_mb":round(_fp_yt.stat().st_size/1024/1024,1)}
         else:
             yield {"type":"error","message":"YouTube 下載失敗（"+(err_yt[0] if err_yt else "未知錯誤")+"）"}
         return
