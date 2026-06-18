@@ -2367,7 +2367,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         opts_x = {"format":"best[ext=mp4]/best",
                   "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),"quiet":True,"no_warnings":True,
                   "merge_output_format":"mp4","concurrent_fragment_downloads":8,
-                  "updatetime":True}
+                  "updatetime":False}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
         if res_x and Path(res_x[0]).exists() and Path(res_x[0]).stat().st_size > 50000:
@@ -2375,7 +2375,6 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             yield {"type":"done","filename":Path(res_x[0]).name,"saved_dir":str(out_dir),"size_mb":sz_x}
         else:
             yield {"type":"error","message":"X 下載失敗（"+(err_x[0] if err_x else "未知錯誤")+"）"}
-        return
         return
 
     # ══ 其他平台（yt-dlp）════════════════════════════════════════
