@@ -1152,7 +1152,7 @@ def index():
 @app.get("/api/ad-iframe")
 def ad_iframe():
     """提供隔離的廣告 HTML，讓手機版 iframe 載入（跨域隔離，無法跳轉父頁面）"""
-    ad_html = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=320"><style>body{margin:0;padding:0;overflow:hidden;background:transparent}</style></head><body><script>window.open=function(){return null};try{Object.defineProperty(window.parent.document,'body',{get:function(){return null}})}catch(e){}</script><script>atOptions={key:'2f4c8115eed4bad1123d0f76fe5b8ec2',format:'iframe',height:50,width:320,params:{}};</script><script src='https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js'></script></body></html>"""
+    ad_html = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=320"><style>body{margin:0;padding:0;overflow:hidden;background:transparent}</style></head><body><script>window.open=function(){return null};</script><script>atOptions={key:'2f4c8115eed4bad1123d0f76fe5b8ec2',format:'iframe',height:50,width:320,params:{}};</script><script src='https://www.highperformanceformat.com/2f4c8115eed4bad1123d0f76fe5b8ec2/invoke.js'></script></body></html>"""
     return HTMLResponse(content=ad_html, headers={"Cache-Control":"no-cache"})
 
 @app.get("/api/debug-douyin")
