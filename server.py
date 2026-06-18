@@ -1767,7 +1767,7 @@ async def douyin_cdn(aweme_id: str):
 
 @app.get("/api/proxy-video")
 async def proxy_video(request: Request, url: str, referer: str = ""):
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import StreamingResponse, RedirectResponse
     from urllib.parse import unquote
     target = unquote(url)
     if not target.startswith("http"):
@@ -1784,27 +1784,43 @@ async def proxy_video(request: Request, url: str, referer: str = ""):
     if range_hdr:
         req_headers["Range"] = range_hdr
 
-    client = httpx.AsyncClient(timeout=120, follow_redirects=True)
-    req2 = client.build_request("GET", target, headers=req_headers)
-    resp = await client.send(req2, stream=True)
-    ct = resp.headers.get("content-type", "video/mp4")
-
-    resp_headers: dict = {"Accept-Ranges": "bytes", "Cache-Control": "no-store"}
-    if "content-range" in resp.headers:
-        resp_headers["Content-Range"] = resp.headers["content-range"]
-    if "content-length" in resp.headers:
-        resp_headers["Content-Length"] = resp.headers["content-length"]
-
-    async def _stream():
-        try:
-            async for chunk in resp.aiter_bytes(512 * 1024):
-                yield chunk
-        finally:
+    try:
+        client = httpx.AsyncClient(timeout=60, follow_redirects=True)
+        req2 = client.build_request("GET", target, headers=req_headers)
+        resp = await client.send(req2, stream=True)
+        if resp.status_code >= 400:
             await resp.aclose()
             await client.aclose()
+            # CDN 失效，直接 redirect 讓瀏覽器自己處理
+            return RedirectResponse(url=target)
+        ct = resp.headers.get("content-type", "video/mp4")
 
-    return StreamingResponse(_stream(), status_code=resp.status_code,
-                             media_type=ct, headers=resp_headers)
+        resp_headers: dict = {"Accept-Ranges": "bytes", "Cache-Control": "no-store"}
+        if "content-range" in resp.headers:
+            resp_headers["Content-Range"] = resp.headers["content-range"]
+        if "content-length" in resp.headers:
+            resp_headers["Content-Length"] = resp.headers["content-length"]
+
+        async def _stream():
+            try:
+                async for chunk in resp.aiter_bytes(512 * 1024):
+                    yield chunk
+            except Exception:
+                pass
+            finally:
+                try:
+                    await resp.aclose()
+                except Exception:
+                    pass
+                try:
+                    await client.aclose()
+                except Exception:
+                    pass
+
+        return StreamingResponse(_stream(), status_code=resp.status_code,
+                                 media_type=ct, headers=resp_headers)
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:100]}, status_code=502)
 
 @app.get("/api/serve-file")
 async def serve_file(filename: str = "", path: str = "", cleanup: bool = False, inline: bool = False):
