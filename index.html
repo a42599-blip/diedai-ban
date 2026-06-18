@@ -1010,18 +1010,30 @@ loadDls();
   window.addEventListener('resize',initDesktop);
 })();
 
-/* ── 手機廣告防彈窗：定時移除覆蓋頁面的彈窗元素 ── */
+/* ── 手機廣告防彈窗：攔截所有蓋版元素 ── */
 (function(){
-  if(window.innerWidth>=768)return; // 只限手機
-  setInterval(function(){
-    // 移除常見的彈窗/蓋版元素
-    var els = document.querySelectorAll('div[style*="position: fixed"][style*="z-index: 999"],div[style*="position: fixed"][style*="z-index: 9999"],iframe[style*="position: fixed"][style*="z-index: 999"]');
-    for(var i=0;i<els.length;i++){
-      if(els[i].id!=='adBar'&&els[i].id!=='dl-overlay'&&els[i].id!=='adSlot1'){
-        els[i].remove();
+  if(window.innerWidth>=768)return;
+  // 攔截 window.open
+  var _origOpen = window.open;
+  window.open = function(){ return null; };
+  // MutationObserver 即時移除蓋版元素
+  var _obs = new MutationObserver(function(muts){
+    for(var m=0;m<muts.length;m++){
+      for(var n=0;n<muts[m].addedNodes.length;n++){
+        var el = muts[m].addedNodes[n];
+        if(el.nodeType===1){
+          var tag = el.tagName.toLowerCase();
+          if((tag==='div'||tag==='iframe'||tag==='section')&&
+             (el.style.position==='fixed'||el.style.position==='absolute')&&
+             el.id!=='adBar'&&el.id!=='dl-overlay'&&el.id!=='adSlot1'&&
+             !el.closest('#adBar')){
+            el.remove();
+          }
+        }
       }
     }
-  },2000);
+  });
+  _obs.observe(document.body,{childList:true,subtree:true});
 })();
 </script>
 </body>
