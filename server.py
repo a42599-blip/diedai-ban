@@ -2359,54 +2359,25 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             yield {"type":"error","message":"YouTube 下載失敗（"+(err_yt[0] if err_yt else "未知錯誤")+"）"}
         return
 
-    # ══ X (Twitter)：用目前時間取代原始上傳時間（iOS 相簿排序用）═══
+    # ══ X (Twitter)：比照 YouTube 下載設定（H.264 優先 + updatetime=True）═══
     if "twitter.com" in real_url or "x.com" in real_url or "t.co" in real_url:
-        _fmt_x = "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best"
-        opts_x = {"format": _fmt_x,
-                "outtmpl":str(out_dir/f"{safe}.%(ext)s"),"quiet":True,"no_warnings":True,
-                "merge_output_format":"mp4","concurrent_fragment_downloads":8,
-                "updatetime":True,
-                "postprocessor_args":{"default":["-map_metadata","-1"]}}
+        yield {"type":"progress","pct":5,"msg":"正在下載 X 影片..."}
+        safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+        # 格式：H264優先，若無則fallback到可用格式（解決直屏影片問題）
+        opts_x = {"format":"bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                  "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),"quiet":True,"no_warnings":True,
+                  "merge_output_format":"mp4","concurrent_fragment_downloads":8,
+                  "updatetime":True,
+                  "embedmetadata":True,
+                  "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]}}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
-        if err_x: yield {"type":"error","message":err_x[0]}; return
-        if res_x:
-            _fp_x = Path(res_x[0])
-            if _fp_x.exists():
-                # 用 ffmpeg 重設影片內部時間戳記為現在（iOS 相簿排序用）
-                try:
-                    import subprocess as _sp_x
-                    import os as _os_x
-                    from datetime import datetime as _dt
-                    _now_epoch = int(__import__('time').time())
-                    _now_iso = _dt.now().strftime('%Y-%m-%dT%H:%M:%S')
-                    _tmp_x = _fp_x.with_suffix('.tmp.mp4')
-                    # ffmpeg：清除原始 metadata，並設新的 creation_time 為現在
-                    _sp_x.run(["ffmpeg", "-i", str(_fp_x),
-                        "-map", "0", "-c", "copy",
-                        "-map_metadata", "-1",
-                        "-metadata", f"creation_time={_now_iso}",
-                        "-metadata", f"com.apple.quicktime.creationdate={_now_iso}",
-                        "-fflags", "+bitexact",
-                        "-flags:v", "+bitexact",
-                        "-flags:a", "+bitexact",
-                        "-y", str(_tmp_x)],
-                        capture_output=True, timeout=30)
-                    if _tmp_x.exists() and _tmp_x.stat().st_size > 50000:
-                        _fp_x.unlink()
-                        _tmp_x.rename(_fp_x)
-                except Exception as _ff_x:
-                    print(f"[x_fix_time] {_ff_x}")
-                # 強制設檔案時間為現在（建立時間 + 修改時間）
-                try:
-                    import os as _os_x
-                    _os_x.utime(_fp_x, (_now_epoch, _now_epoch))
-                except:
-                    pass
-            sz_x = round(_fp_x.stat().st_size/1024/1024,1) if _fp_x.exists() else 0
-            yield {"type":"done","filename":_fp_x.name,"saved_dir":str(out_dir),"size_mb":sz_x}
+        if res_x and Path(res_x[0]).exists() and Path(res_x[0]).stat().st_size > 50000:
+            sz_x = round(Path(res_x[0]).stat().st_size/1024/1024, 1)
+            yield {"type":"done","filename":Path(res_x[0]).name,"saved_dir":str(out_dir),"size_mb":sz_x}
         else:
-            yield {"type":"error","message":"下載失敗，無輸出檔案"}
+            yield {"type":"error","message":"X 下載失敗（"+(err_x[0] if err_x else "未知錯誤")+"）"}
+        return
         return
 
     # ══ 其他平台（yt-dlp）════════════════════════════════════════
