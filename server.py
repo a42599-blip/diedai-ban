@@ -2355,24 +2355,13 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
             _fp_yt = Path(res_yt[0])
-            # 用 ffmpeg 重設影片內部時間戳記為現在（iOS 相簿排序用）
+            # 重設檔案系統時間為現在（iOS 相簿用 modification time 排序）
             try:
-                import subprocess as _sp_yt
-                from datetime import datetime as _dt_yt
-                _now_iso = _dt_yt.now().strftime('%Y-%m-%dT%H:%M:%S')
-                _tmp_yt = _fp_yt.with_suffix('.tmp.mp4')
-                _sp_yt.run(["ffmpeg", "-i", str(_fp_yt),
-                    "-map", "0", "-c", "copy",
-                    "-map_metadata", "-1",
-                    "-metadata", f"creation_time={_now_iso}",
-                    "-metadata", f"com.apple.quicktime.creationdate={_now_iso}",
-                    "-fflags", "+bitexact",
-                    "-flags:v", "+bitexact",
-                    "-flags:a", "+bitexact",
-                    str(_tmp_yt)], check=True, capture_output=True, timeout=30)
-                if _tmp_yt.exists() and _tmp_yt.stat().st_size > 50000:
-                    _os_yt = __import__('os')
-                    _os_yt.replace(str(_tmp_yt), str(_fp_yt))
+                import time as _time_yt
+                _now = _time_yt.time()
+                _os_yt = __import__('os')
+                # 同時改 access time 和 modification time
+                _os_yt.utime(str(_fp_yt), (_now, _now))
             except Exception:
                 pass
             yield {"type":"done","filename":_fp_yt.name,"saved_dir":str(out_dir),"size_mb":round(_fp_yt.stat().st_size/1024/1024,1)}
