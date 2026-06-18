@@ -2214,7 +2214,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         # fallback yt-dlp
         yield {"type":"progress","pct":5,"msg":"改用 yt-dlp 解析小紅書..."}
         safe_x2 = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_x = {"format":"best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_x2}.%(ext)s"),
+        opts_x = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_x2}.%(ext)s"),
                   "quiet":True,"no_warnings":True,"merge_output_format":"mp4"}
         res_x, err_x = [], []
         async for evt in ytdlp_dl(opts_x, real_url, res_x, err_x): yield evt
@@ -2267,7 +2267,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if _IS_FB:
         yield {"type":"progress","pct":5,"msg":"正在下載 Facebook 影片..."}
         safe_fb = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_fb = {"format":"best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_fb}.%(ext)s"),
+        opts_fb = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_fb}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4",
                    "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
         res_fb, err_fb = [], []
@@ -2284,7 +2284,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if _IS_IG:
         yield {"type":"progress","pct":5,"msg":"正在下載 Instagram 影片..."}
         safe_ig = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_ig = {"format":"best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),
+        opts_ig = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4"}
         res_ig, err_ig = [], []
         async for evt in ytdlp_dl(opts_ig, real_url, res_ig, err_ig): yield evt
@@ -2300,7 +2300,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
     if _IS_WB:
         yield {"type":"progress","pct":5,"msg":"正在下載微博影片..."}
         safe_wb = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
-        opts_wb = {"format":"best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best",
+        opts_wb = {"format":"best[ext=mp4]/best",
                    "outtmpl":str(out_dir/f"{safe_wb}.%(ext)s"),
                    "quiet":True,"no_warnings":True,"merge_output_format":"mp4"}
         res_wb, err_wb = [], []
@@ -2364,7 +2364,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         yield {"type":"progress","pct":5,"msg":"正在下載 X 影片..."}
         safe_x = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
         # 格式：H264優先，若無則fallback到可用格式（解決直屏影片問題）
-        opts_x = {"format":"best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best",
+        opts_x = {"format":"best[ext=mp4]/best",
                   "outtmpl":str(out_dir/f"{safe_x}.%(ext)s"),"quiet":True,"no_warnings":True,
                   "merge_output_format":"mp4","concurrent_fragment_downloads":8,
                   "updatetime":False}
