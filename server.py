@@ -195,6 +195,65 @@ def _bili_wbi_sign(params, mixin_key):
     p["w_rid"] = _hashlib.md5((q + mixin_key).encode()).hexdigest()
     return p
 
+async def _bili_pw_fetch(bvid: str) -> dict:
+    """用真瀏覽器開 B站 影片頁，檕截 playurl 取得 CDN 直鏈。
+    用在 API 回 412（海外 IP 被擋）時的保底方案。"""
+    if not bvid:
+        return {}
+    try:
+        from playwright.async_api import async_playwright as _pw
+        async with _pw() as _p:
+            _b = await _pw_browser(_p)
+            _ctx = await _b.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                locale="zh-CN")
+            _page = await _ctx.new_page()
+            _info = {"url": "", "title": "", "thumb": "", "dur": 0, "author": ""}
+            async def _intercept(response):
+                if "/x/player/playurl" in response.url or "/x/player/wbi/playurl" in response.url:
+                    try:
+                        _j = await response.json()
+                        if _j.get("code") == 0:
+                            _durls = (_j.get("data") or {}).get("durl", [])
+                            if _durls and _durls[0].get("url"):
+                                _info["url"] = _durls[0]["url"]
+                    except Exception:
+                        pass
+            _page.on("response", _intercept)
+            await _page.goto(f"https://www.bilibili.com/video/{bvid}", timeout=45000, wait_until="domcontentloaded")
+            await _page.wait_for_timeout(7000)
+            try:
+                _meta = await _page.evaluate('''() => {
+                    try {
+                        const s = window.__INITIAL_STATE__;
+                        if (!s) return null;
+                        const vd = s.videoData || (s.initState && s.initState.videoData);
+                        if (!vd) return null;
+                        return {title: vd.title||'', thumb: vd.pic||'', dur: vd.duration||0,
+                                author: (vd.owner && vd.owner.name) || ''};
+                    } catch(e) { return null; }
+                }''')
+                if _meta:
+                    for _k in ("title", "thumb", "dur", "author"):
+                        if _meta.get(_k):
+                            _info[_k] = _meta[_k]
+            except Exception:
+                pass
+            _thumb = _info["thumb"]
+            if _thumb.startswith("//"):
+                _thumb = "https:" + _thumb
+            await _b.close()
+            if _info["url"]:
+                print(f"[bilibili_pw2] OK bvid={bvid}")
+                return {"title": _info["title"] or "B站影片", "thumbnail": _thumb,
+                        "duration": _info["dur"], "uploader": _info["author"],
+                        "platform": "Bilibili", "cdn_url": _info["url"], "cdn_audio_url": "",
+                        "embed_url": f"https://player.bilibili.com/player.html?bvid={bvid}&high_quality=1&danmaku=0",
+                        "formats": [{"id": "best", "label": "原始畫質", "height": 0}]}
+    except Exception as _e:
+        print(f"[bilibili_pw2] {_e}")
+    return {}
+
 async def _get_bilibili_direct(url: str) -> dict:
     """直接打 Bilibili API 取得影片資訊和 CDN URL，不走 yt-dlp"""
     bvid_m = re.search(r'BV[A-Za-z0-9]+', url)
@@ -217,7 +276,9 @@ async def _get_bilibili_direct(url: str) -> dict:
                 except Exception:
                     continue
             if not meta or meta.get("code") != 0:
-                return {}
+                # B站 API 現在對海外 IP 回 412，不直接放棄，改用真瀏覽器硬取
+                print("[bilibili] API 不可用（412）→ 改用 Playwright 真瀏覽器")
+                return await _bili_pw_fetch(bvid_m.group() if bvid_m else "")
             d = meta["data"]
             bvid  = d.get("bvid", "")
             cid   = d.get("cid", 0)
