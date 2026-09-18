@@ -687,10 +687,11 @@ async def _get_douyin_via_thirdparty(url: str) -> dict:
     APIS = [
         {
             "name": "tikwm",
-            "method": "POST",
+            "method": "GET",
             "url": "https://tikwm.com/api/",
             "data": {"url": url, "hd": "1"},
-            "headers": {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"},
+            "headers": {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                        "Accept": "application/json, text/plain, */*"},
         },
         {
             "name": "douyin.wtf",
@@ -703,7 +704,7 @@ async def _get_douyin_via_thirdparty(url: str) -> dict:
 
     async def _try_one(api: dict) -> dict | None:
         try:
-            async with httpx.AsyncClient(timeout=6, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 if api["method"] == "POST":
                     r = await client.post(api["url"], data=api.get("data"), headers=api.get("headers", {}))
                 else:
