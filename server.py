@@ -300,39 +300,39 @@ async def _get_bilibili_direct(url: str) -> dict:
                     async with _pw() as _p:
                         _b = await _p.chromium.launch(headless=True,
                             args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"])
-                    _ctx = await _b.new_context(
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
-                        locale="zh-CN")
-                    _page = await _ctx.new_page()
-                    # 攔截 playurl API 回應
-                    _pw_cdn = {"url": ""}
-                    async def _pw_intercept(response):
-                        if "/x/player/playurl" in response.url or "/x/player/wbi/playurl" in response.url:
-                            try:
-                                _j = await response.json()
-                                if _j.get("code") == 0:
-                                    _durls = (_j.get("data") or {}).get("durl", [])
-                                    if _durls and _durls[0].get("url"):
-                                        _pw_cdn["url"] = _durls[0]["url"]
-                            except:
-                                pass
-                    _page.on("response", _pw_intercept)
-                    await _page.goto(f"https://www.bilibili.com/video/{bvid}", timeout=30000, wait_until="networkidle")
-                    await _page.wait_for_timeout(3000)
-                    if not _pw_cdn["url"]:
-                        # 從 window.__INITIAL_STATE__ 取影片資訊
-                        _pw_cdn["url"] = await _page.evaluate('''() => {
-                            try {
-                                const s = window.__INITIAL_STATE__;
-                                if (!s) return '';
-                                const vd = s.videoData || s.initState?.videoData;
-                                if (vd?.videoInfo) return vd.videoInfo.url || '';
-                                return '';
-                            } catch(e) { return ''; }
-                        }''')
-                    if _pw_cdn["url"] and not _pw_cdn["url"].startswith("blob:"):
-                        _cdn_url = _pw_cdn["url"]
-                    await _b.close()
+                        _ctx = await _b.new_context(
+                            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+                            locale="zh-CN")
+                        _page = await _ctx.new_page()
+                        # 攔截 playurl API 回應
+                        _pw_cdn = {"url": ""}
+                        async def _pw_intercept(response):
+                            if "/x/player/playurl" in response.url or "/x/player/wbi/playurl" in response.url:
+                                try:
+                                    _j = await response.json()
+                                    if _j.get("code") == 0:
+                                        _durls = (_j.get("data") or {}).get("durl", [])
+                                        if _durls and _durls[0].get("url"):
+                                            _pw_cdn["url"] = _durls[0]["url"]
+                                except:
+                                    pass
+                        _page.on("response", _pw_intercept)
+                        await _page.goto(f"https://www.bilibili.com/video/{bvid}", timeout=30000, wait_until="networkidle")
+                        await _page.wait_for_timeout(3000)
+                        if not _pw_cdn["url"]:
+                            # 從 window.__INITIAL_STATE__ 取影片資訊
+                            _pw_cdn["url"] = await _page.evaluate('''() => {
+                                try {
+                                    const s = window.__INITIAL_STATE__;
+                                    if (!s) return '';
+                                    const vd = s.videoData || s.initState?.videoData;
+                                    if (vd?.videoInfo) return vd.videoInfo.url || '';
+                                    return '';
+                                } catch(e) { return ''; }
+                            }''')
+                        if _pw_cdn["url"] and not _pw_cdn["url"].startswith("blob:"):
+                            _cdn_url = _pw_cdn["url"]
+                        await _b.close()
                 except Exception as _pw_ex:
                     print(f"[bilibili_pw] {_pw_ex}")
 
@@ -2350,7 +2350,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
                    "embedmetadata":True,
                    "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
-                   "extractor_args":{"youtube":{"player_client":"all"}},
+                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","web"]}},
                    **_YT_OPTS_EXTRA}
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
