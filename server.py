@@ -646,6 +646,25 @@ async def _get_douyin_via_abogus(url: str) -> dict:
             if not url_list:
                 return {}
             cdn = url_list[0].replace("playwm", "play")
+            # 多畫質：抖音回傳的 bit_rate 陣列（每個有不同的解析度）
+            _dy_fmts = []
+            try:
+                for _b in (video.get("bit_rate") or []):
+                    _pa = _b.get("play_addr") or {}
+                    _uls = _pa.get("url_list") or []
+                    if not _uls:
+                        continue
+                    _gear = _b.get("gear_name") or ""
+                    _h = _pa.get("height") or 0
+                    _lb = {"adapt_1080_1": "1080P", "adapt_720_1": "720P",
+                           "adapt_540_1": "540P", "adapt_480_1": "480P"}.get(_gear, (_gear or ("%dP" % _h)))
+                    _dy_fmts.append({"id": str(_h or _gear or len(_dy_fmts)),
+                                     "label": _lb, "height": _h,
+                                     "url": _uls[0].replace("playwm", "play")})
+            except Exception:
+                pass
+            if not _dy_fmts:
+                _dy_fmts = [{"id": "best", "label": "最高畫質", "height": 0, "url": cdn}]
             return {
                 "title": (ad.get("desc") or "抖音影片")[:80],
                 "thumbnail": video.get("cover", {}).get("url_list", [""])[0] if video.get("cover") else "",
@@ -653,6 +672,7 @@ async def _get_douyin_via_abogus(url: str) -> dict:
                 "uploader": ad.get("author", {}).get("nickname", "") if ad.get("author") else "",
                 "cdn_url": cdn,
                 "cdn_audio_url": "",
+                "formats": _dy_fmts,
             }
     except ImportError:
         print("[douyin_fast/abogus] crawler module not available")
@@ -692,8 +712,18 @@ async def _get_douyin_via_thirdparty(url: str) -> dict:
                 if api["name"] == "tikwm":
                     if d.get("code") == 0 and d.get("data"):
                         dat = d["data"]
-                        cdn = dat.get("hdplay") or dat.get("play") or ""
+                        _hd = dat.get("hdplay") or ""
+                        _sd = dat.get("play") or ""
+                        cdn = _hd or _sd or ""
                         if cdn:
+                            # 多畫質：tikwm 會回 hdplay（HD）跟 play（標準）兩個
+                            _tk_fmts = []
+                            if _hd:
+                                _tk_fmts.append({"id": "hd", "label": "HD 高畫質", "height": 1080, "url": _hd})
+                            if _sd and _sd != _hd:
+                                _tk_fmts.append({"id": "sd", "label": "標準畫質", "height": 720, "url": _sd})
+                            if not _tk_fmts:
+                                _tk_fmts = [{"id": "best", "label": "最高畫質", "height": 0, "url": cdn}]
                             return {
                                 "title": dat.get("title", "抖音影片")[:80],
                                 "thumbnail": dat.get("origin_cover") or dat.get("cover", ""),
@@ -701,6 +731,7 @@ async def _get_douyin_via_thirdparty(url: str) -> dict:
                                 "uploader": (dat.get("author") or {}).get("nickname", ""),
                                 "cdn_url": cdn,
                                 "cdn_audio_url": "",
+                                "formats": _tk_fmts,
                             }
                 elif api["name"] == "douyin.wtf":
                     vd = d.get("video_data") or d.get("data") or []
@@ -1324,6 +1355,14 @@ async def debug_douyin(url: str = ""):
 @app.get("/api/video-info")
 async def video_info(url: str):
     real_url = await resolve_short_url(url)
+
+    # 抖音/西瓜共用短網址：iesdouyin.com/xg/video/<id> 或 /video/<id>
+    # 轉成標準的 www.douyin.com/video/<id> 才能走抖音的解析流程
+    if "iesdouyin.com" in real_url:
+        _ie_m = re.search(r'/(?:xg/)?video/(\d{15,25})', real_url)
+        if _ie_m:
+            real_url = f"https://www.douyin.com/video/{_ie_m.group(1)}"
+            print(f"[iesdouyin] 轉址 → {real_url}")
 
     if _is_shopee_url(real_url):
         info = await _get_shopee_video_info(real_url)
