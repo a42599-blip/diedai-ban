@@ -1765,29 +1765,6 @@ async def douyin_cdn(aweme_id: str):
     cdn = info.get("cdn_url") or ""
     return JSONResponse({"cdn_url": cdn, "ok": bool(cdn)})
 
-# ── 依目標網址的「客戶端標記」選對應的 User-Agent ─────────────────────
-# YouTube 的 googlevideo 串流網址會綁定產出它的客戶端（網址裡的 c= 參數），
-# 用不符的身份去抓會被回 403。例如 c=ANDROID_VR 就必須用 VR 眼鏡的身份。
-_UA_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-_UA_ANDROID_VR = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-_UA_ANDROID = "com.google.android.youtube/19.29.37 (Linux; U; Android 11) gzip"
-_UA_IOS = "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)"
-_UA_TVHTML5 = "Mozilla/5.0 (PlayStation; PlayStation 5/2.26) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0 Safari/605.1.15"
-
-def _ua_for_url(target: str) -> str:
-    """YouTube 串流網址帶 c=<客戶端>，要用相符的身份才抓得到（其他平台一律用桌機 UA）"""
-    u = target or ""
-    if "googlevideo.com" in u or "youtube.com" in u:
-        if "c=ANDROID_VR" in u:
-            return _UA_ANDROID_VR
-        if "c=ANDROID" in u:
-            return _UA_ANDROID
-        if "c=IOS" in u:
-            return _UA_IOS
-        if "c=TVHTML5" in u or "c=TV" in u:
-            return _UA_TVHTML5
-    return _UA_DESKTOP
-
 @app.get("/api/proxy-video")
 async def proxy_video(request: Request, url: str, referer: str = ""):
     from fastapi.responses import StreamingResponse, RedirectResponse
@@ -1799,7 +1776,7 @@ async def proxy_video(request: Request, url: str, referer: str = ""):
         m = re.match(r'(https?://[^/]+)', unquote(referer) if referer else target)
         referer = m.group(1) if m else "https://www.douyin.com/"
     req_headers = {
-        "User-Agent": _ua_for_url(target),
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Referer": unquote(referer),
         "Accept": "*/*",
     }
@@ -1886,7 +1863,7 @@ async def dl_stream(request: Request, url: str, title: str = "影片", referer: 
     if hasattr(origin_ref, 'group'):
         origin_ref = origin_ref.group(1)
     req_headers = {
-        "User-Agent": _ua_for_url(url),
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Referer": origin_ref or url,
         "Accept": "*/*",
     }
