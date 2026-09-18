@@ -1592,7 +1592,7 @@ async def video_info(url: str):
                 best_cdn = u
 
         origin = re.sub(r'(https?://[^/]+).*', r'\1', real_url)
-        proxy_url = f"/api/proxy-video?url={_q2(best_cdn, safe='')}&referer={_q2(origin, safe='')}&page={_q2(real_url, safe='')}" if best_cdn else ""
+        proxy_url = f"/api/proxy-video?url={_q2(best_cdn, safe='')}&referer={_q2(origin, safe='')}" if best_cdn else ""
 
         return JSONResponse({"title": info.get("title",""), "thumbnail": info.get("thumbnail",""),
                              "duration": info.get("duration",0), "uploader": info.get("uploader",""),
@@ -1788,45 +1788,8 @@ def _ua_for_url(target: str) -> str:
             return _UA_TVHTML5
     return _UA_DESKTOP
 
-def _ytdlp_fetch_local(page_url: str, title: str = "影片") -> "Path | None":
-    """保底方案：YouTube 的 googlevideo 直鏈抓不到時，改用 yt-dlp 把影片抓到本機。
-    只用在 proxy_video / dl_stream 的失敗降級，不影響正常流程。"""
-    try:
-        import yt_dlp as _ydl
-        safe = re.sub(r'[\\/:*?"<>|]', '_', (title or "影片"))[:60] or "影片"
-        opts = {"outtmpl": str(DOWNLOAD_DIR / f"{safe}.%(ext)s"),
-                "quiet": True, "no_warnings": True, "overwrites": True,
-                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "merge_output_format": "mp4", "updatetime": False}
-        if "youtube.com" in page_url or "youtu.be" in page_url:
-            opts["extractor_args"] = {"youtube": {"player_client": "all"}}
-            opts.update(_YT_OPTS_EXTRA)
-            try:
-                _env = os.environ.get("YT_COOKIES_JSON", "")
-                if _env:
-                    import json as _j, tempfile as _tf
-                    _c = _j.loads(_env)
-                    _f = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
-                    _f.write("# Netscape HTTP Cookie File\n")
-                    for _n, _v in _c.items():
-                        _f.write(f".youtube.com\tTRUE\t/\tTRUE\t0\t{_n}\t{_v}\n")
-                    _f.close()
-                    opts["cookiefile"] = _f.name
-            except Exception:
-                pass
-        with _ydl.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(page_url, download=True)
-            raw = ydl.prepare_filename(info)
-        for ext in (".mp4", ".webm", ".mkv", ".mov"):
-            c = Path(raw).with_suffix(ext)
-            if c.exists() and c.stat().st_size > 10000:
-                return c
-    except Exception as _e:
-        print(f"[ytdlp_local] {_e}")
-    return None
-
 @app.get("/api/proxy-video")
-async def proxy_video(request: Request, url: str, referer: str = "", page: str = ""):
+async def proxy_video(request: Request, url: str, referer: str = ""):
     from fastapi.responses import StreamingResponse, RedirectResponse
     from urllib.parse import unquote
     target = unquote(url)
@@ -1851,15 +1814,6 @@ async def proxy_video(request: Request, url: str, referer: str = "", page: str =
         if resp.status_code >= 400:
             await resp.aclose()
             await client.aclose()
-            # ── YouTube 直鏈抓不到（身份/風控）→ 改用 yt-dlp 下載後回傳本機檔 ──
-            if page and ("youtube.com" in page or "youtu.be" in page):
-                try:
-                    from fastapi.responses import FileResponse
-                    _lp = await asyncio.get_event_loop().run_in_executor(executor, _ytdlp_fetch_local, page, "")
-                    if _lp and _lp.exists():
-                        return FileResponse(str(_lp), media_type="video/mp4")
-                except Exception as _fe:
-                    print(f"[proxy_ytdlp_fallback] {_fe}")
             # CDN 失效，直接 redirect 讓瀏覽器自己處理
             return RedirectResponse(url=target)
         ct = resp.headers.get("content-type", "video/mp4")
@@ -1919,7 +1873,7 @@ async def serve_file(filename: str = "", path: str = "", cleanup: bool = False, 
     return FileResponse(str(fpath), media_type=mime, headers=hdrs, background=bg)
 
 @app.get("/api/dl-stream")
-async def dl_stream(request: Request, url: str, title: str = "影片", referer: str = "", page: str = ""):
+async def dl_stream(request: Request, url: str, title: str = "影片", referer: str = ""):
     from fastapi.responses import StreamingResponse
     from urllib.parse import quote as _uq, unquote as _uuq
     if not url.startswith("http"):
@@ -1944,18 +1898,8 @@ async def dl_stream(request: Request, url: str, title: str = "影片", referer: 
     req2 = client.build_request("GET", url, headers=req_headers)
     resp = await client.send(req2, stream=True)
     ct = resp.headers.get("content-type", "video/mp4")
-    if resp.status_code >= 400 or "text" in ct or "html" in ct:
+    if "text" in ct or "html" in ct:
         await resp.aclose(); await client.aclose()
-        # ── YouTube 直鏈抓不到（身份/風控）→ 改用 yt-dlp 下載後回傳本機檔 ──
-        if page and ("youtube.com" in page or "youtu.be" in page):
-            try:
-                from fastapi.responses import FileResponse
-                _lp = await asyncio.get_event_loop().run_in_executor(executor, _ytdlp_fetch_local, page, title)
-                if _lp and _lp.exists():
-                    return FileResponse(str(_lp), media_type="video/mp4",
-                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}; filename=video.mp4"})
-            except Exception as _fe:
-                print(f"[dl_ytdlp_fallback] {_fe}")
         return JSONResponse({"error": "cdn returned non-video response"}, status_code=502)
 
     resp_headers: dict = {
