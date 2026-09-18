@@ -1462,6 +1462,59 @@ async def video_info(url: str):
             })
 
     # ── 小紅書：直解 HTML（繞過 yt-dlp 格式問題）──────────────────
+    # ── Instagram：用 embed 頁面 + iPhone 身份取影片（不需登入、不需 cookies）──
+    # 原理：IG 的 /embed/captioned/ 頁面在使用手機身份時會直接吐出 video_url
+    if "instagram.com" in real_url:
+        from urllib.parse import quote as _qi
+        _ig_m = re.search(r'/(?:reel|reels|p|tv)/([A-Za-z0-9_-]{5,})', real_url)
+        if _ig_m:
+            _ig_sc = _ig_m.group(1)
+            _ig_ua = ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                      "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1")
+            try:
+                async with httpx.AsyncClient(timeout=20, follow_redirects=True,
+                                             headers={"User-Agent": _ig_ua}) as _igc:
+                    for _ig_path in (f"/reel/{_ig_sc}/embed/captioned/",
+                                     f"/p/{_ig_sc}/embed/captioned/"):
+                        try:
+                            _igr = await _igc.get("https://www.instagram.com" + _ig_path)
+                            if _igr.status_code != 200:
+                                continue
+                            _igh = _igr.text
+                            _ii = _igh.find('video_url')
+                            if _ii < 0:
+                                continue
+                            _iseg = _igh[_ii:_ii + 3000].replace('\\', '')
+                            _iu = re.search(r'https://[^"\'<>\s]+', _iseg)
+                            if not _iu:
+                                continue
+                            _icdn = _iu.group(0)
+                            _ititle = ""
+                            _it = re.search(r'"title"\s*:\s*"([^"]{1,150})"', _igh.replace('\\', ''))
+                            if _it:
+                                _ititle = _it.group(1)
+                            _ithumb = ""
+                            _ip = _igh.find('display_url')
+                            if _ip > 0:
+                                _ipm = re.search(r'https://[^"\'<>\s]+',
+                                                 _igh[_ip:_ip + 2000].replace('\\', ''))
+                                if _ipm:
+                                    _ithumb = _ipm.group(0)
+                            print(f"[instagram_embed] OK {_ig_sc}")
+                            return JSONResponse({
+                                "title": _ititle or "Instagram 影片",
+                                "thumbnail": _ithumb, "duration": 0, "uploader": "",
+                                "platform": "Instagram", "url": real_url,
+                                "has_video": True,
+                                "proxy_url": f"/api/proxy-video?url={_qi(_icdn, safe='')}&referer=https://www.instagram.com/",
+                                "cdn_url": _icdn, "cdn_audio_url": "",
+                                "formats": [{"id": "best", "label": "最高畫質", "height": 0}],
+                            })
+                        except Exception as _ige:
+                            print(f"[instagram_embed] {_ige}")
+            except Exception as _igx:
+                print(f"[instagram_outer] {_igx}")
+
     if "xiaohongshu.com" in real_url or "xhslink.com" in real_url or "xhslink.cn" in real_url:
         xhs = await _get_xhs_direct(real_url)
         if xhs.get("cdn_url"):
