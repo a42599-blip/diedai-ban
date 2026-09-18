@@ -245,10 +245,13 @@ async def _bili_pw_fetch(bvid: str) -> dict:
             await _b.close()
             if _info["url"]:
                 print(f"[bilibili_pw2] OK bvid={bvid}")
+                from urllib.parse import quote as _qb3
                 return {"title": _info["title"] or "B站影片", "thumbnail": _thumb,
                         "duration": _info["dur"], "uploader": _info["author"],
                         "platform": "Bilibili", "cdn_url": _info["url"], "cdn_audio_url": "",
-                        "embed_url": f"https://player.bilibili.com/player.html?bvid={bvid}&high_quality=1&danmaku=0",
+                        "has_video": True,
+                        "proxy_url": f"/api/proxy-video?url={_qb3(_info['url'], safe='')}&referer={_qb3('https://www.bilibili.com/', safe='')}",
+                        "embed_url": "",
                         "formats": [{"id": "best", "label": "原始畫質", "height": 0}]}
     except Exception as _e:
         print(f"[bilibili_pw2] {_e}")
@@ -290,6 +293,11 @@ async def _get_bilibili_direct(url: str) -> dict:
             cid   = d.get("cid", 0)
             title = d.get("title", "")
             thumb = d.get("pic", "")
+            # 修正縮圖：B站回傳常是 http:// 或 //，網頁是 https 會被瀏覽器擋掉（混合內容）
+            if thumb.startswith("//"):
+                thumb = "https:" + thumb
+            elif thumb.startswith("http://"):
+                thumb = "https" + thumb[4:]
             dur   = d.get("duration", 0)
             author = (d.get("owner") or {}).get("name", "")
             embed_url = f"https://player.bilibili.com/player.html?bvid={bvid}&cid={cid}&high_quality=1&danmaku=0"
@@ -312,11 +320,14 @@ async def _get_bilibili_direct(url: str) -> dict:
                     cdn_url = durls[0].get("url", "")
                     if cdn_url:
                         label = {80:"1080P", 64:"720P HD", 32:"480P", 16:"360P"}.get(qn, f"{qn}P")
+                        from urllib.parse import quote as _qb
                         return {
                             "title": title, "thumbnail": thumb, "duration": dur,
                             "uploader": author, "platform": "Bilibili",
                             "cdn_url": cdn_url, "cdn_audio_url": "",
-                            "embed_url": embed_url,
+                            "has_video": True,
+                            "proxy_url": f"/api/proxy-video?url={_qb(cdn_url, safe='')}&referer={_qb('https://www.bilibili.com/', safe='')}",
+                            "embed_url": "",
                             "formats": [{"id": str(qn), "label": label, "height": 0}],
                         }
             # 拿不到直連 → 用 curl 命令列（不同 TLS 特徵，可能繞過封鎖）
@@ -401,10 +412,13 @@ async def _get_bilibili_direct(url: str) -> dict:
                     print(f"[bilibili_pw] {_pw_ex}")
 
             if _cdn_url:
+                from urllib.parse import quote as _qb2
                 return {"title": title, "thumbnail": thumb, "duration": dur,
                         "uploader": author, "platform": "Bilibili",
                         "cdn_url": _cdn_url, "cdn_audio_url": "",
-                        "embed_url": embed_url,
+                        "has_video": True,
+                        "proxy_url": f"/api/proxy-video?url={_qb2(_cdn_url, safe='')}&referer={_qb2('https://www.bilibili.com/', safe='')}",
+                        "embed_url": "",
                         "formats": [{"id":"best","label":"原始畫質","height":0}]}
 
             # 全部失敗，至少返回 embed
