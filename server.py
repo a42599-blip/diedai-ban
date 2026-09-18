@@ -263,11 +263,17 @@ async def _get_bilibili_direct(url: str) -> dict:
     params = {"bvid": bvid_m.group()} if bvid_m else {"aid": aid_m.group(1)}
     try:
         async with httpx.AsyncClient(timeout=20, headers=_BILI_HEADERS_WITH_COOKIE) as client:
-            # Step 1: 取元數據（嘗試多個 API 端點）
+            # Step 1: 先取 WBI key（快取 30 分鐘）
+            # B站 已停用舊的 x/web-interface/view（回 412），必須改叫 x/web-interface/wbi/view 並帶簽名
+            wbi_key = await _bili_wbi_key(client)
+
+            # Step 2: 取元數據（優先 wbi 版，失敗才試舊版）
             meta = None
-            for api_url in ["https://api.bilibili.com/x/web-interface/view", "https://api.bilibili.com/x/web-interface/view/detail"]:
+            for api_url in ["https://api.bilibili.com/x/web-interface/wbi/view",
+                            "https://api.bilibili.com/x/web-interface/view"]:
                 try:
-                    resp = await client.get(api_url, params=params)
+                    _rp = _bili_wbi_sign(params, wbi_key) if ("wbi/view" in api_url and wbi_key) else params
+                    resp = await client.get(api_url, params=_rp)
                     if resp.status_code == 200:
                         meta = resp.json()
                         if meta.get("code") == 0:
@@ -276,8 +282,8 @@ async def _get_bilibili_direct(url: str) -> dict:
                 except Exception:
                     continue
             if not meta or meta.get("code") != 0:
-                # B站 API 現在對海外 IP 回 412，不直接放棄，改用真瀏覽器硬取
-                print("[bilibili] API 不可用（412）→ 改用 Playwright 真瀏覽器")
+                # 兩者都失敗 → 改用真瀏覽器硬取
+                print("[bilibili] API 不可用 → 改用 Playwright 真瀏覽器")
                 return await _bili_pw_fetch(bvid_m.group() if bvid_m else "")
             d = meta["data"]
             bvid  = d.get("bvid", "")
@@ -288,10 +294,7 @@ async def _get_bilibili_direct(url: str) -> dict:
             author = (d.get("owner") or {}).get("name", "")
             embed_url = f"https://player.bilibili.com/player.html?bvid={bvid}&cid={cid}&high_quality=1&danmaku=0"
 
-            # Step 2: 取 WBI key（快取 30 分鐘）
-            wbi_key = await _bili_wbi_key(client)
-
-            # Step 3: 取播放 URL，帶 WBI 簽名（2024年起 playurl 對海外 IP 要求簽名）
+            # Step 3: 取播放 URL（WBI key 已在 Step 1 取好）
             for qn in [80, 64, 32, 16]:
                 raw_p = {"bvid": bvid, "cid": cid, "qn": qn, "fnval": 1, "platform": "pc"}
                 signed_p = _bili_wbi_sign(raw_p, wbi_key) if wbi_key else raw_p
