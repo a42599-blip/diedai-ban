@@ -1160,7 +1160,17 @@ async def _get_tiktok_via_tikwm(url: str) -> dict:
             d = r.json()
             if d.get("code") == 0 and d.get("data"):
                 dat = d["data"]
-                cdn = dat.get("play") or dat.get("hdplay") or ""
+                _hd = dat.get("hdplay") or ""
+                _sd = dat.get("play") or ""
+                cdn = _sd or _hd or ""
+                # 多畫質：tikwm 會回 hdplay（HD）跟 play（標準）兩個
+                _tt_fmts = []
+                if _hd:
+                    _tt_fmts.append({"id": "hd", "label": "HD 高畫質", "height": 1080, "url": _hd})
+                if _sd and _sd != _hd:
+                    _tt_fmts.append({"id": "sd", "label": "標準畫質（無浮水印）", "height": 720, "url": _sd})
+                if not _tt_fmts:
+                    _tt_fmts = [{"id": "best", "label": "原始畫質（無浮水印）", "height": 0, "url": cdn}]
                 return {
                     "title":     dat.get("title", ""),
                     "thumbnail": dat.get("origin_cover") or dat.get("cover", ""),
@@ -1168,6 +1178,7 @@ async def _get_tiktok_via_tikwm(url: str) -> dict:
                     "uploader":  (dat.get("author") or {}).get("nickname", ""),
                     "cdn_url":   cdn,
                     "platform":  "TikTok",
+                    "formats":   _tt_fmts,
                 }
     except Exception as ex:
         print(f"[tikwm] {ex}")
@@ -1491,10 +1502,13 @@ async def video_info(url: str):
         from urllib.parse import quote as _qtk
         tk = await _get_tiktok_via_tikwm(real_url)
         if tk.get("cdn_url"):
+            # 保留 tikwm 回傳的多畫質清單（hd/sd），不要把 formats 覆寫掉
+            _tkf = tk.get("formats") or [{"id": "best", "label": "原始畫質（無浮水印）", "height": 0, "url": tk["cdn_url"]}]
             return JSONResponse({
                 **tk, "url": real_url,
-                "proxy_url": "",
-                "formats": [{"id": "best", "label": "原始畫質（無浮水印）", "height": 0}],
+                "has_video": True,
+                "proxy_url": f"/api/proxy-video?url={_qtk(tk['cdn_url'], safe='')}&referer=https://www.tiktok.com/",
+                "formats": _tkf,
             })
 
     # ── B站：直打 Bilibili API（雲端/本機都能用，不靠 yt-dlp）─────
