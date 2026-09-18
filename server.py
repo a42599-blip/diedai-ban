@@ -364,12 +364,18 @@ async def _get_xhs_direct(url: str) -> dict:
             r = await client.get(url)
             final_url = str(r.url)
             html = r.text
-        # 從 meta 取影片 URL
-        video_m = re.search(r'"contentUrl"\s*:\s*"([^"]+\.mp4[^"]*)"', html)
+        # 從 meta 或 JSON 取影片 URL
+        # 小紅書 2026 新格式：欄位叫 masterUrl，且網址被轉義成 \u002F
+        html_un = html.replace('\\u002F', '/').replace('\\/', '/')
+        video_m = re.search(r'"masterUrl"\s*:\s*"([^"]+\.mp4[^"]*)"', html_un)
+        if not video_m:
+            video_m = re.search(r'"backupUrls"\s*:\s*\[\s*"([^"]+\.mp4[^"]*)"', html_un)
+        if not video_m:
+            video_m = re.search(r'"contentUrl"\s*:\s*"([^"]+\.mp4[^"]*)"', html_un)
         if not video_m:
             video_m = re.search(r'<video[^>]+src="([^"]+)"', html)
         if not video_m:
-            video_m = re.search(r'"url"\s*:\s*"(https://[^"]+\.mp4[^"]*)"', html)
+            video_m = re.search(r'"url"\s*:\s*"(https://[^"]+\.mp4[^"]*)"', html_un)
         title_m  = re.search(r'<meta[^>]+og:title[^>]+content="([^"]+)"', html)
         thumb_m  = re.search(r'<meta[^>]+og:image[^>]+content="([^"]+)"', html)
         if video_m:
@@ -393,7 +399,7 @@ def extract_url_from_text(text: str) -> str:
 async def resolve_short_url(url: str) -> str:
     text_url = extract_url_from_text(url)
     SHORT_DOMAINS = ("v.douyin.com",
-                     "xhslink.com", "t.co", "vm.tiktok.com", "vt.tiktok.com",
+                     "xhslink.com", "xhslink.cn", "t.co", "vm.tiktok.com", "vt.tiktok.com",
                      "b23.tv")
     if any(d in text_url for d in SHORT_DOMAINS):
         try:
@@ -1392,7 +1398,7 @@ async def video_info(url: str):
             })
 
     # ── 小紅書：直解 HTML（繞過 yt-dlp 格式問題）──────────────────
-    if "xiaohongshu.com" in real_url or "xhslink.com" in real_url:
+    if "xiaohongshu.com" in real_url or "xhslink.com" in real_url or "xhslink.cn" in real_url:
         xhs = await _get_xhs_direct(real_url)
         if xhs.get("cdn_url"):
             from urllib.parse import quote as _qx
@@ -2192,7 +2198,7 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         return
 
     # ══ 小紅書：直解 HTML 下載 ══════════════════════════════════
-    if "xiaohongshu.com" in real_url or "xhslink.com" in real_url:
+    if "xiaohongshu.com" in real_url or "xhslink.com" in real_url or "xhslink.cn" in real_url:
         yield {"type":"progress","pct":5,"msg":"解析小紅書影片..."}
         cdn_x = hint_cdn
         use_title_x = title
