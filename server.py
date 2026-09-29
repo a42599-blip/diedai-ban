@@ -1065,7 +1065,20 @@ async def _douyin_browser_context():
             "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
             "Object.defineProperty(navigator,'languages',{get:()=>['zh-CN','zh','en']});")
         _DY_BROWSER.update({"pw": pw, "browser": browser, "ctx": ctx})
-        print("[douyin_browser] 常駐 context 已建立")
+        # ⚠️ 先「暖機」：開一次抖音首頁，讓它把 cookies（ttwid 等）種進這個 context。
+        #    沒暖機的話第一次解析會拿到「推薦影片」（抖音對沒有 cookies 的訪客
+        #    不發 aweme/v1/web/aweme/detail）→ 使用者看到沒封面、解析失敗。
+        try:
+            _warm = await ctx.new_page()
+            try:
+                await _warm.goto("https://www.douyin.com/", wait_until="commit", timeout=15000)
+                await asyncio.sleep(3)
+            except Exception:
+                pass
+            await _warm.close()
+        except Exception:
+            pass
+        print("[douyin_browser] 常駐 context 已建立（已暖機）")
         return ctx
 
 
@@ -1106,7 +1119,7 @@ async def _get_douyin_cdn(video_url: str) -> dict:
         holder: dict = {}
 
         async def on_response(resp):
-            if "aweme/v1/web/aweme/detail" not in resp.url or holder.get("detail"):
+            if "aweme/detail" not in resp.url or holder.get("detail"):
                 return
             try:
                 body = await resp.json()
@@ -1117,29 +1130,55 @@ async def _get_douyin_cdn(video_url: str) -> dict:
                 holder["detail"] = aweme
 
         page.on("response", on_response)
-        try:
-            # `commit`：導覽一送出就回來（不等 domcontentloaded，抖音腳本很重）
-            await page.goto(video_url, wait_until="commit", timeout=15000)
-        except Exception:
-            pass
 
-        for _i in range(50):                       # 最多等 20 秒
-            if holder.get("detail"):
-                break
-            await asyncio.sleep(0.4)
-            if _i == 3:                            # 有時候要「點一下播放」才會打 API
+        detail: dict = {}
+        wrong_video = False
+        # ⚠️ 抖音對「訪客」很常先回「推薦影片」或根本不打 API（擋機器人）→ 多試幾次：
+        #    第 1 次 www.douyin.com/video/<id>；第 2、3 次換成 iesdouyin 分享頁（不同前端）。
+        _targets = [video_url]
+        if aweme_id:
+            _targets.append(f"https://www.iesdouyin.com/share/video/{aweme_id}")
+            _targets.append(f"https://www.douyin.com/video/{aweme_id}")
+        for _attempt, _target in enumerate(_targets):
+            if _attempt > 0:
+                # 每次都用「新頁面」（同一頁重載常常不會再打 API）
                 try:
-                    await page.evaluate("() => { document.querySelector('video')?.play?.(); }")
+                    await page.close()
                 except Exception:
                     pass
+                page = await ctx.new_page()
+                await _stealth(page)
+                page.on("response", on_response)
+            holder.clear()
+            try:
+                await page.goto(_target, wait_until="commit", timeout=15000)
+            except Exception:
+                pass
+            for _i in range(30):                   # 每次最多等 12 秒（3 次共約 36 秒）
+                if holder.get("detail"):
+                    break
+                await asyncio.sleep(0.4)
+                if _i in (3, 8):                   # 「按下播放」才會打 API
+                    try:
+                        await page.evaluate(
+                            "() => { const v=document.querySelector('video');"
+                            " if(v){ v.muted=true; v.play?.(); } }")
+                    except Exception:
+                        pass
 
-        detail = holder.get("detail") or {}
-        if detail:
-            # ⚠️ 一定要確認是「我們要的那一支」（否則會拿到推薦影片）
-            got_id = str(detail.get("aweme_id") or detail.get("awemeId") or "")
-            if aweme_id and got_id and got_id != aweme_id:
-                print(f"[douyin_cdn] 攔到別支（{got_id} != {aweme_id}）→ 丟棄")
-                detail = {}
+            detail = holder.get("detail") or {}
+            if detail:
+                # ⚠️ 一定要確認是「我們要的那一支」（否則會拿到推薦影片）
+                got_id = str(detail.get("aweme_id") or detail.get("awemeId") or "")
+                if aweme_id and got_id and got_id != aweme_id:
+                    print(f"[douyin_cdn] 攔到別支（{got_id} != {aweme_id}）→ 丟棄")
+                    detail = {}
+                    wrong_video = True
+                    result["_wrong_video"] = True
+                    continue
+                wrong_video = False
+                break
+            print(f"[douyin_cdn] 第 {_attempt + 1} 次沒攔到（{_target[:46]}）")
 
         if detail:
             video = detail.get("video") or {}
@@ -1188,22 +1227,10 @@ async def _get_douyin_cdn(video_url: str) -> dict:
             if _fmts:
                 result["cdn_url"] = _fmts[0]["url"]
 
-        if not result["thumbnail"] or not result["title"] or result["title"] == "抖音影片":
-            # 備援：頁面上的 og: 標籤（至少讓使用者看到封面／標題）
-            try:
-                _og = await page.evaluate("""() => ({
-                    t: document.querySelector('meta[property="og:title"]')?.content
-                       || document.querySelector('h1')?.textContent || document.title || '',
-                    i: document.querySelector('meta[property="og:image"]')?.content
-                       || document.querySelector('meta[name="twitter:image"]')?.content
-                       || document.querySelector('video')?.poster || ''
-                })""") or {}
-                if _og.get("t") and (not result["title"] or result["title"] == "抖音影片"):
-                    result["title"] = str(_og["t"]).replace("- 抖音", "").strip()[:80] or "抖音影片"
-                if _og.get("i") and not result["thumbnail"]:
-                    result["thumbnail"] = _og["i"]
-            except Exception:
-                pass
+        # ⚠️ 2026-09-29 移除 og: 備援：抖音對「沒有 cookies／載不出來」的訪客會直接顯示
+        #    **推薦影片**，那時的 og:title／og:image 是「別支」的 → 會讓使用者看到
+        #    錯誤的標題與封面（比沒有還糟）。寧可回預設值，讓前端顯示「解析失敗」。
+
     except Exception as e:
         print(f"[douyin_cdn] 錯誤：{e}")
     finally:
@@ -1521,6 +1548,9 @@ async def video_info(url: str):
                         results = _r
                         break
                     if _r.get("thumbnail") or (_r.get("title") and _r.get("title") != "抖音影片"):
+                        # ⚠️ 不准把「別支的標題」當備援（寧可顯示預設值）
+                        if _r.get("_wrong_video"):
+                            continue
                         if not fallback.get("thumbnail"):
                             fallback = _r
                 if results:
