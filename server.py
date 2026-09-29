@@ -1024,6 +1024,179 @@ async def _pick_fastest_url(urls: list[str], headers: dict | None = None, timeou
     print(f"[cdn_pick] best={best[1][:80]}  latency={best[0]:.2f}s")
     return best[1]
 
+# ══ 抖音官方 API（照轉運站的做法：完整參數＋UA 綁定＋ttwid＋自帶 a_bogus）══
+# ⚠️ 2026-09-29（小羅：「比照轉運站的邏輯去修，不要用抽卡」）：
+#   轉運站這條路是**主力**（最準、能拿 bit_rate 多畫質、不用開瀏覽器）。
+#   v8i8 舊版只送 {"aweme_id","msToken"} 而且用 Chrome/124 → 與簽章 ua_code 不合 → 403。
+_DY_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
+_DY_DETAIL_API = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
+_DY_TTWID_API = "https://ttwid.bytedance.com/ttwid/union/register/"
+_DY_TTWID_CACHE: dict = {}
+
+
+def _dy_abogus():
+    """載入自帶的 a_bogus 演算法（放在 crawlers/_dy_abogus.py）。"""
+    import sys
+    if str(BASE_DIR / "crawlers") not in sys.path:
+        sys.path.insert(0, str(BASE_DIR / "crawlers"))
+    if str(BASE_DIR) not in sys.path:
+        sys.path.insert(0, str(BASE_DIR))
+    try:
+        from crawlers._dy_abogus import ABogus
+    except Exception:
+        from _dy_abogus import ABogus            # noqa: PLC0415
+    return ABogus()
+
+
+def _dy_build_params(aweme_id: str) -> dict:
+    """抖音 Web API 的完整參數（照轉運站；aid/版本 都要跟 UA 對得上）。"""
+    return {
+        "device_platform": "webapp", "aid": "6383", "channel": "channel_pc_web",
+        "pc_client_type": "1", "version_code": "190500", "version_name": "19.5.0",
+        "cookie_enabled": "true", "screen_width": "1920", "screen_height": "1080",
+        "browser_language": "zh-CN", "browser_platform": "Win32", "browser_name": "Chrome",
+        "browser_online": "true", "engine_name": "Blink", "os_name": "Windows",
+        "os_version": "10", "platform": "PC", "browser_version": "90.0.4430.212",
+        "engine_version": "90.0.4430.212", "cpu_core_num": "12", "device_memory": "8",
+        "aweme_id": aweme_id,
+    }
+
+
+async def _dy_ttwid() -> str:
+    """拿 ttwid（快取；抖音官方 API 要帶這個 Cookie）。"""
+    if _DY_TTWID_CACHE.get("v"):
+        return _DY_TTWID_CACHE["v"]
+    try:
+        async with httpx.AsyncClient(timeout=15) as cl:
+            r = await cl.post(_DY_TTWID_API, json={
+                "region": "cn", "aid": 1768, "needFid": False,
+                "service": "www.ixigua.com",
+                "migrate_info": {"ticket": "", "source": "node"},
+                "cbUrlProtocol": "https", "union": True})
+            m = re.search(r"ttwid=([^;]+)", r.headers.get("set-cookie", "") or "")
+            if m:
+                _DY_TTWID_CACHE["v"] = m.group(1)
+    except Exception as e:
+        print(f"[douyin_official] ttwid 取得失敗：{e}")
+    return _DY_TTWID_CACHE.get("v", "")
+
+
+async def _dy_fetch_detail(aweme_id: str) -> dict:
+    """打抖音官方 Web API（a_bogus 簽章＋ttwid），回傳 aweme_detail（照轉運站）。"""
+    if not aweme_id:
+        return {}
+    params = _dy_build_params(aweme_id)
+    headers = {
+        "User-Agent": _DY_UA,
+        "Referer": f"https://www.douyin.com/video/{aweme_id}",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+    }
+    for attempt in range(3):
+        try:
+            params["a_bogus"] = _dy_abogus().get_value(
+                {k: v for k, v in params.items() if k != "a_bogus"})
+        except Exception as e:
+            print(f"[douyin_official] a_bogus 失敗：{e}")
+            return {}
+        ttwid = await _dy_ttwid()
+        if ttwid:
+            headers["Cookie"] = f"ttwid={ttwid}"
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as cl:
+                r = await cl.get(_DY_DETAIL_API, params=params, headers=headers)
+            if r.status_code != 200:
+                print(f"[douyin_official] API {r.status_code}（第 {attempt + 1} 次）")
+                if attempt < 2:
+                    await asyncio.sleep(0.8 * (attempt + 1))
+                    continue
+                return {}
+            data = r.json()
+        except Exception as e:
+            print(f"[douyin_official] {type(e).__name__}: {str(e)[:80]}")
+            data = None
+        detail = (data or {}).get("aweme_detail") or {}
+        if detail:
+            return detail
+        if attempt < 2:
+            await asyncio.sleep(0.8 * (attempt + 1))
+    return {}
+
+
+def _douyin_detail_to_result(detail: dict) -> dict:
+    """把 aweme_detail 轉成 v8i8 的結果格式（標題／封面／作者／多畫質）。"""
+    out: dict = {}
+    if not detail:
+        return out
+    video = detail.get("video") or {}
+    out["title"] = (detail.get("desc") or "").strip()[:80] or "抖音影片"
+    out["uploader"] = (detail.get("author") or {}).get("nickname") or ""
+    _dur = int(detail.get("duration") or 0)
+    out["duration"] = _dur // 1000 if _dur > 1000 else _dur
+    for _k in ("origin_cover", "cover", "dynamic_cover"):
+        _urls = (video.get(_k) or {}).get("url_list") or []
+        if _urls:
+            out["thumbnail"] = _urls[0]
+            break
+
+    def _h_label(h: int) -> str:
+        if h >= 2160: return "4K"
+        if h >= 1440: return "2K"
+        if h >= 1080: return "1080P"
+        if h >= 720:  return "720P HD"
+        if h >= 540:  return "540P"
+        if h >= 480:  return "480P"
+        return f"{h}P" if h else "360P"
+
+    def _nowm(u: str) -> str:
+        return u.replace("/playwm/", "/play/").replace("playwm", "play")
+
+    buckets: dict = {}
+    for _br in video.get("bit_rate") or []:
+        _addr = (_br.get("play_addr") or {}).get("url_list") or []
+        if not _addr:
+            continue
+        _h = int(_br.get("height") or 0)
+        _bps = int(_br.get("bit_rate") or 0)
+        if not _h:
+            _nums = [int(x) for x in re.findall(r"\d+", _br.get("gear_name") or "")]
+            _cand = [n for n in _nums if 240 <= n <= 4320]
+            _h = _cand[0] if _cand else 0
+        if not _h:
+            continue
+        _prev = buckets.get(_h)
+        if _prev is None or _bps > _prev[0]:
+            buckets[_h] = (_bps, _br)
+
+    _fmts: list = []
+    for _h in sorted(buckets, reverse=True):
+        _url = ((buckets[_h][1].get("play_addr") or {}).get("url_list") or [""])[0]
+        if not _url:
+            continue
+        _fmts.append({"id": f"v{_h}", "label": _h_label(_h), "url": _nowm(_url), "height": _h})
+    if not _fmts:
+        _urls = ((video.get("play_addr") or {}).get("url_list")
+                 or (video.get("download_addr") or {}).get("url_list") or [])
+        if _urls:
+            _fmts.append({"id": "best", "label": "最高畫質", "url": _nowm(_urls[0]), "height": 0})
+    out["formats"] = _fmts
+    if _fmts:
+        out["cdn_url"] = _fmts[0]["url"]
+    return out
+
+
+async def _get_douyin_via_official(url: str) -> dict:
+    """v8i8 的抖音結果（走轉運站的官方 API 路線）。"""
+    aweme_id = _parse_aweme_id(url)
+    if not aweme_id:
+        return {}
+    detail = await _dy_fetch_detail(aweme_id)
+    if not detail:
+        return {}
+    return _douyin_detail_to_result(detail)
+
+
 _DY_BROWSER: dict = {"pw": None, "browser": None, "ctx": None}
 _DY_LOCK: "asyncio.Lock | None" = None
 
@@ -1181,55 +1354,9 @@ async def _get_douyin_cdn(video_url: str) -> dict:
             print(f"[douyin_cdn] 第 {_attempt + 1} 次沒攔到（{_target[:46]}）")
 
         if detail:
-            video = detail.get("video") or {}
-            result["title"] = (detail.get("desc") or "").strip()[:80] or "抖音影片"
-            result["uploader"] = (detail.get("author") or {}).get("nickname") or ""
-            _dur = int(detail.get("duration") or 0)
-            result["duration"] = _dur // 1000 if _dur > 1000 else _dur
-            for _k in ("origin_cover", "cover", "dynamic_cover"):
-                _urls = (video.get(_k) or {}).get("url_list") or []
-                if _urls:
-                    result["thumbnail"] = _urls[0]
-                    break
-
-            # 多畫質：bit_rate[] 依高度分組，每個高度只留最高碼率那一個
-            buckets: dict = {}
-            for _br in video.get("bit_rate") or []:
-                _addr = (_br.get("play_addr") or {}).get("url_list") or []
-                if not _addr:
-                    continue
-                _h = int(_br.get("height") or 0)
-                _bps = int(_br.get("bit_rate") or 0)
-                if not _h:
-                    _nums = [int(x) for x in re.findall(r"\d+", _br.get("gear_name") or "")]
-                    _cand = [n for n in _nums if 240 <= n <= 4320]
-                    _h = _cand[0] if _cand else 0
-                if not _h:
-                    continue
-                _prev = buckets.get(_h)
-                if _prev is None or _bps > _prev[0]:
-                    buckets[_h] = (_bps, _br)
-
-            _fmts: list = []
-            for _h in sorted(buckets, reverse=True):
-                _url = ((buckets[_h][1].get("play_addr") or {}).get("url_list") or [""])[0]
-                if not _url:
-                    continue
-                _fmts.append({"id": f"v{_h}", "label": _h_label(_h),
-                              "url": _nowm(_url), "height": _h})
-            if not _fmts:
-                _urls = ((video.get("play_addr") or {}).get("url_list")
-                         or (video.get("download_addr") or {}).get("url_list") or [])
-                if _urls:
-                    _fmts.append({"id": "best", "label": "最高畫質",
-                                  "url": _nowm(_urls[0]), "height": 0})
-            result["formats"] = _fmts
-            if _fmts:
-                result["cdn_url"] = _fmts[0]["url"]
-
-        # ⚠️ 2026-09-29 移除 og: 備援：抖音對「沒有 cookies／載不出來」的訪客會直接顯示
-        #    **推薦影片**，那時的 og:title／og:image 是「別支」的 → 會讓使用者看到
-        #    錯誤的標題與封面（比沒有還糟）。寧可回預設值，讓前端顯示「解析失敗」。
+            result.update(_douyin_detail_to_result(detail))
+        else:
+            print("[douyin_cdn] 沒攔到（改用其他路線）")
 
     except Exception as e:
         print(f"[douyin_cdn] 錯誤：{e}")
@@ -1528,6 +1655,7 @@ async def video_info(url: str):
             
             fast_task = asyncio.create_task(_get_douyin_fast(real_url))
             cdn_task = asyncio.create_task(_get_douyin_cdn(real_url))
+            off_task = asyncio.create_task(_get_douyin_via_official(real_url))
             # ⚠️ 2026-09-29 修（比照轉運站）：抖音真正會成功的是「瀏覽器攔 API」那條，
             #    它要 15～40 秒；舊版只給 5 秒就砍掉 → 使用者看到「沒封面、下載說解析失敗」。
             #    改成：先等「有拿到 cdn_url」的那一條（最多 45 秒），
@@ -1535,7 +1663,7 @@ async def video_info(url: str):
             results = {}
             fallback: dict = {}
             for _tick in range(90):                     # 90 × 0.5s = 45 秒
-                for _t in (fast_task, cdn_task):
+                for _t in (off_task, fast_task, cdn_task):
                     if not _t.done():
                         continue
                     try:
@@ -1555,10 +1683,10 @@ async def video_info(url: str):
                             fallback = _r
                 if results:
                     break
-                if fast_task.done() and cdn_task.done():
+                if fast_task.done() and cdn_task.done() and off_task.done():
                     break
                 await asyncio.sleep(0.5)
-            for _t in (fast_task, cdn_task):
+            for _t in (off_task, fast_task, cdn_task):
                 if not _t.done():
                     _t.cancel()
             return results or fallback
