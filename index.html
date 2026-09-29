@@ -567,6 +567,16 @@ function getDeviceId(){ let id=localStorage.getItem('dl_device_id'); if(!id){ id
 function extractUrl(text){ const m=text.match(/https?:\/\/[^\s一-鿿＀-￯　-〿⺀-⻿]+/); if(m) return m[0].replace(/[,，。！？、]+$/,''); return text.trim(); }
 function getSavePath(){ return isMobile()?'':localStorage.getItem('dl_save_path')||''; }
 
+/* 檔名清洗：抖音標題常含換行等控制字元 → iOS 認不出是影片（只給「儲存到檔案」、沒有「儲存影片」）→ 存不進相簿（2026-09-30 修）*/
+function _cleanFname(name){
+  var s=String(name==null?'':name)
+    .replace(/[\u0000-\u001f\u007f]+/g,' ')
+    .replace(/[\\/:*?"<>|]+/g,'_')
+    .replace(/\s+/g,' ')
+    .trim();
+  return s||'影片.mp4';
+}
+
 /* ── iOS / Android 手機儲存 ── */
 function _iosSaveSetup(ov, dlHref, fname, sizeHint){
   const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
@@ -669,7 +679,7 @@ function _androidSaveSetup(ov, dlHref, fname, sizeHint){
   const isInApp=/Line\/|FBAN|FB_IAB|Instagram|MicroMessenger|KAKAOTALK/i.test(ua);
   if(isInApp){ _iosSaveSetup(ov,dlHref,fname,sizeHint); return; }
   const safeHref=dlHref.replace(/"/g,'%22');
-  const safeFname=(fname||'影片.mp4').replace(/"/g,'&quot;');
+  const safeFname=_cleanFname(fname).replace(/"/g,'&quot;');
   ov.innerHTML=`<div style="text-align:center;padding:4px 0">
     <div style="font-size:0.85rem;color:#6ee7b7;margin-bottom:14px">✅ 影片已備妥${sizeHint?' ('+sizeHint+')':''}</div>
     <a id="_adl_a" href="${safeHref}" download="${safeFname}"
@@ -733,10 +743,11 @@ async function dlVideo(url, title, cdnUrl, cdnAudioUrl, quality){
           es.close();
           if(d.filename){
             const dlHref=API+'/api/serve-file?filename='+encodeURIComponent(d.filename)+'&cleanup=true';
+            const _saveName=_cleanFname(d.filename);
             if(isMobile()){
               const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
-              if(isIOS){ _iosSaveSetup(ov,dlHref,d.filename,d.size_mb+'MB'); }
-              else      { _androidSaveSetup(ov,dlHref,d.filename,d.size_mb+'MB'); }
+              if(isIOS){ _iosSaveSetup(ov,dlHref,_saveName,d.size_mb+'MB'); }
+              else      { _androidSaveSetup(ov,dlHref,_saveName,d.size_mb+'MB'); }
             } else {
               ov.innerHTML='<div style="text-align:center;padding:8px 0"><div style="font-size:0.9rem;color:#6ee7b7;margin-bottom:12px">✅ 下載完成</div><a href="'+dlHref.replace(/"/g,'%22')+'" style="display:block;width:100%;padding:13px;background:linear-gradient(135deg,#0d9488,#14b8a6);color:#fff;border-radius:12px;font-size:1rem;font-weight:700;margin-bottom:8px;cursor:pointer;text-decoration:none;text-align:center;box-sizing:border-box">📥 儲存到電腦</a><button onclick="document.getElementById(\'dl-overlay\').style.display=\'none\'" style="background:transparent;border:1px solid #065f46;color:#6ee7b7;border-radius:8px;padding:6px 20px;cursor:pointer;font-size:0.8rem">關閉</button></div>';
               loadDls();
@@ -911,7 +922,7 @@ async function dlUrl(){
   if(isMobile() && cdnUrl && !cdnAudioUrl && !_isXHS && !_isBili && !_isYT){
     const origin=(()=>{ try{ return new URL(urlInfo.url).origin; }catch(e){ return ''; } })();
     const q=new URLSearchParams({url:cdnUrl,title:urlInfo.title||'影片',referer:origin});
-    const fname=(urlInfo.title||'影片').replace(/[/:*?"<>|]/g,'_').slice(0,60)+'.mp4';
+    const fname=_cleanFname(urlInfo.title).replace(/\.mp4$/i,'')+'.mp4';
     const dlStreamUrl=API+'/api/dl-stream?'+q;
     const ov=document.getElementById('dl-overlay');
     ov.style.display='block';
