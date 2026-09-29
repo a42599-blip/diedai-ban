@@ -5,3 +5,4 @@ playwright>=1.44.0
 playwright-stealth>=1.0.6
 python-multipart>=0.0.9
 pyyaml>=6.0
+bgutil-ytdlp-pot-provider==2.0.0   # YouTube 通行證外掛（版本要跟 Dockerfile 的產生器一致）

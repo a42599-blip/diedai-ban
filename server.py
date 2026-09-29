@@ -24,10 +24,106 @@ DOWNLOAD_DIR      = BASE_DIR / "下載影片"
 _YT_OPTS_EXTRA = {
     # 明確指定 Deno JS runtime（yt-dlp 會自動偵測，但明確設確保抓到）
     "js_runtimes": {"deno": {}},
+    # ⚠️ 2026-09-29（照轉運站）：**EJS 解題程式庫**，一定要開！
+    #    v8i8 在 2026-06 把它拿掉 → 伺服器解不了 YouTube 的 JS 驗證
+    #    → web/web_embedded 全部「Requested format is not available」
+    #    → 只剩 App 身分（android 要通行證→403、android_vr 只給前 1MB）→ 時好時壞（像抽卡）
+    "remote_components": ["ejs:github"],
     # 失敗時指數退避重試
     "retry_sleep": "extractor:exp=1:20",
     "fragment_retries": 10,
 }
+
+# ⚠️ 2026-09-29（照轉運站 app/platforms/youtube.py）：**依序試「不需要通行證」的身分**。
+#    第二欄＝該身分要交給 yt-dlp 的 extractor_args。
+#    為什麼 android_vr 只排第三：它不需通行證，但長片常常只給「前 1MB」→ 抓過去就 403。
+#: 第三欄＝這個身分需要什麼："" 不用／"pot" 需要通行證產生器
+_YT_STRATEGIES = (
+    ("mweb_pot",     {"player_client": ["mweb"]},          "pot"),  # 官方推薦：mweb＋通行證
+    ("web_embedded", {"player_client": ["web_embedded"]},  ""),     # 不需通行證（限可嵌入影片）
+    ("android_vr",   {"player_client": ["android_vr"]},    ""),     # 不需通行證，但長片只給前 1MB（備用）
+    ("tv",           {"player_client": ["tv"]},            ""),     # 不需通行證（DRM 格式會被濾掉）
+    ("default",      {},                                   ""),     # 讓 yt-dlp 自己挑（最後手段）
+)
+#: 剛剛「試抓成功」的身分（下載時要用同一個，不要讓 yt-dlp 自己混挑）
+_YT_STATE: dict = {"last_ok": "", "pot": (0.0, False), "warp": (0.0, False)}
+
+# ⚠️ 2026-09-29（照轉運站）：雲端機房的 IP 會被 YouTube 要求「證明不是機器人」。
+#    轉運站的解法＝①容器內跑 bgutil 通行證產生器（start.sh 開在 127.0.0.1:4416）
+#    ②Cloudflare WARP 免費通道（start.sh 開在 127.0.0.1:40001）→ 從 Cloudflare 網路出去。
+#    兩個都沒起來時 → 這裡會自動跳過，不會壞（只是回到原本的直連行為）。
+_YT_POT_URL = "http://127.0.0.1:4416/ping"
+_YT_WARP_PROXY = "http://127.0.0.1:40001"
+
+
+def _yt_pot_ready() -> bool:
+    """通行證產生器有沒有在跑（結果快取 30 秒）。"""
+    import time as _t
+    at, ok = _YT_STATE["pot"]
+    if _t.time() - at < 30:
+        return ok
+    try:
+        ok = httpx.get(_YT_POT_URL, timeout=0.5).status_code == 200
+    except Exception:
+        ok = False
+    _YT_STATE["pot"] = (_t.time(), ok)
+    return ok
+
+
+def _yt_warp_ready() -> bool:
+    """WARP 通道「真的通」才算（透過它連 Cloudflare，要看到 warp=on；快取 60 秒）。
+
+    ⚠️ 不能只看 40001 有沒有開：通道開著卻沒連上時，請求會卡到逾時。
+    """
+    import time as _t
+    at, ok = _YT_STATE["warp"]
+    if _t.time() - at < 60:
+        return ok
+    try:
+        r = httpx.get("https://www.cloudflare.com/cdn-cgi/trace",
+                      proxy=_YT_WARP_PROXY, timeout=4)
+        ok = "warp=on" in r.text or "warp=plus" in r.text
+    except Exception:
+        ok = False
+    _YT_STATE["warp"] = (_t.time(), ok)
+    return ok
+
+
+def _yt_pick_probe_url(formats: list) -> str:
+    """挑一個「有影片」的格式網址來試抓（優先影音合一、再來純影像）。"""
+    def _is_mf(f):
+        u = (f.get("url") or "").lower()
+        return any(x in u for x in (".m3u8", ".mpd", "m3u8?", "manifest"))
+    both = [f for f in formats if f.get("url") and not _is_mf(f)
+            and f.get("vcodec", "none") != "none" and f.get("acodec", "none") != "none"]
+    vid = [f for f in formats if f.get("url") and not _is_mf(f)
+           and f.get("vcodec", "none") != "none"]
+    pool = both or vid
+    if not pool:
+        return ""
+    return max(pool, key=lambda x: (x.get("height") or 0, x.get("tbr") or 0)).get("url", "")
+
+
+def _yt_probe_ok(url: str) -> bool:
+    """抓「1.5MB 之後」的一小段，確認 googlevideo 真的給檔（照轉運站的做法）。
+
+    ⚠️ 只抓開頭會被「前 1MB 照給」騙過（android_vr 就是這樣）→ 一定要抓 1.5MB 之後。
+    """
+    if not url:
+        return False
+    try:
+        with httpx.Client(timeout=12, follow_redirects=True) as _c:
+            _r = _c.get(url, headers={"Range": "bytes=1500000-1500200"})
+            if _r.status_code in (200, 206) and len(_r.content) > 0:
+                return True
+            if _r.status_code == 416:
+                # ⚠️ 影片比 1.5MB 小（短片）→ 要求 1.5MB 之後會回 416，這不是失敗。
+                #    改抓開頭一小段確認真的給檔就好。
+                _r2 = _c.get(url, headers={"Range": "bytes=0-100000"})
+                return _r2.status_code in (200, 206) and len(_r2.content) > 0
+            return False
+    except Exception:
+        return False
 
 def _ig_context(page: str):
     """從 IG embed 頁面取出 `contextJSON` 並解析成 dict。
@@ -1924,9 +2020,9 @@ async def video_info(url: str):
                          "Sec-Fetch-Mode": "navigate",
                          "Sec-Fetch-Site": "none"},
         }
-        # YouTube：player_client=all + Deno JS runtime 解驗證
-        if "youtube.com" in real_url or "youtu.be" in real_url:
-            opts["extractor_args"] = {"youtube": {"player_client": "all"}}
+        # YouTube：照轉運站（依序試「不需要通行證」的身分，並實際試抓驗證）
+        _is_yt_url = "youtube.com" in real_url or "youtu.be" in real_url
+        if _is_yt_url:
             opts.update(_YT_OPTS_EXTRA)
             # 讓 yt-dlp 自己管理 cookies，不傳 Railway httpx 抓的（雲端 IP cookies 反而干擾）
             # 只有緊急時可設 YT_COOKIES_JSON 環境變數
@@ -1968,6 +2064,37 @@ async def video_info(url: str):
                     _tmp_cookie_file = tf.name
                 except Exception:
                     pass
+        if _is_yt_url:
+            # ⚠️ 2026-09-29：把「身分選擇」做完並**試抓驗證**，避免解析成功但下載 403。
+            _last_err = ""
+            _yt_use_warp = _yt_warp_ready()
+            if _yt_use_warp:
+                print("[youtube] 走 Cloudflare WARP 通道")
+            for _name, _ea, _needs in _YT_STRATEGIES:
+                if _needs == "pot" and not _yt_pot_ready():
+                    continue                      # 產生器沒起來 → 跳過，不浪費時間
+                _o = dict(opts)
+                _o["extractor_args"] = {"youtube": dict(_ea)} if _ea else {}
+                if _yt_use_warp:
+                    _o["proxy"] = _YT_WARP_PROXY
+                try:
+                    with yt_dlp.YoutubeDL(_o) as _ydl:
+                        _inf = _ydl.extract_info(real_url, download=False)
+                except Exception as _ex:
+                    _last_err = str(_ex)
+                    print(f"[youtube/{_name}] 失敗：{_last_err[:110]}")
+                    continue
+                if not _inf:
+                    print(f"[youtube/{_name}] 沒有回傳資料")
+                    continue
+                if _yt_probe_ok(_yt_pick_probe_url(_inf.get("formats") or [])):
+                    _YT_STATE["last_ok"] = _name
+                    print(f"[youtube] OK 身分={_name}（試抓 1.5MB 之後成功）")
+                    return _inf
+                print(f"[youtube/{_name}] 試抓失敗（1.5MB 之後拿不到）→ 換下一個身分")
+            print(f"[youtube] 全部身分都失敗：{_last_err[:120]}")
+            with yt_dlp.YoutubeDL(opts) as _ydl:          # 最後手段：維持原本行為
+                return _ydl.extract_info(real_url, download=False)
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(real_url, download=False)
@@ -2806,9 +2933,20 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
                    "outtmpl":str(out_dir/f"{safe_yt}.%(ext)s"),"quiet":True,"no_warnings":True,
                    "merge_output_format":"mp4","concurrent_fragment_downloads":8,"updatetime":False,
                    "embedmetadata":True,
-                   "postprocessor_args":{"default":["-movflags","+faststart+fastskip"]},
-                   "extractor_args":{"youtube":{"player_client":["ios","android","android_embedded","web"]}},
+                   # ⚠️ 2026-09-29 修：`+fastskip` 不是合法的 ffmpeg movflag
+                   #    → 影音分開下載時「合併」一定失敗（Conversion failed）＝YouTube 下載不行的原因之一
+                   #    只留標準的 +faststart
+                   "postprocessor_args":{"default":["-movflags","+faststart"]},
                    **_YT_OPTS_EXTRA}
+        # ⚠️ 2026-09-29（照轉運站）：下載要用「解析時試抓成功的那個身分」。
+        #    若讓 yt-dlp 自己混挑，可能挑到 android_vr（長片過 1MB 就 403）。
+        _yt_last = _YT_STATE.get("last_ok") or "web_embedded"
+        opts_yt["extractor_args"] = {"youtube": dict(
+            next((ea for n, ea, _nd in _YT_STRATEGIES if n == _yt_last),
+                 {"player_client": ["web_embedded"]}))}
+        if _yt_warp_ready():
+            opts_yt["proxy"] = _YT_WARP_PROXY
+        print(f"[youtube_dl] 使用身分={_yt_last} 通道={'WARP' if opts_yt.get('proxy') else '直連'}")
         res_yt, err_yt = [], []
         async for evt in ytdlp_dl(opts_yt, real_url, res_yt, err_yt): yield evt
         if res_yt and Path(res_yt[0]).exists() and Path(res_yt[0]).stat().st_size > 50000:
