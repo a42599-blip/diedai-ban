@@ -104,24 +104,26 @@ def _yt_pick_probe_url(formats: list) -> str:
     return max(pool, key=lambda x: (x.get("height") or 0, x.get("tbr") or 0)).get("url", "")
 
 
-def _yt_probe_ok(url: str) -> bool:
+def _yt_probe_ok(url: str, proxy: str = "") -> bool:
     """抓「1.5MB 之後」的一小段，確認 googlevideo 真的給檔（照轉運站的做法）。
 
     ⚠️ 只抓開頭會被「前 1MB 照給」騙過（android_vr 就是這樣）→ 一定要抓 1.5MB 之後。
+    ⚠️ 2026-09-29（線上實測踩到）：**試抓一定要跟解析走同一條通道（WARP）**，
+       不然解析走通道成功、試抓走直連失敗 → 每個身分都被誤判失敗 → 解析回空的。
+       轉運站的 `_probe(url, headers, proxy)` 就是有帶 proxy。
+    ⚠️ 影片比 1.5MB 小（短片）時會回 416 → 改抓開頭確認（不是失敗）。
     """
     if not url:
         return False
+    _h = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                         "(KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"),
+          "Accept": "*/*"}
     try:
-        with httpx.Client(timeout=12, follow_redirects=True) as _c:
-            _r = _c.get(url, headers={"Range": "bytes=1500000-1500200"})
-            if _r.status_code in (200, 206) and len(_r.content) > 0:
-                return True
+        with httpx.Client(timeout=10, follow_redirects=True, proxy=(proxy or None)) as _c:
+            _r = _c.get(url, headers={**_h, "Range": "bytes=1572864-1573887"})
             if _r.status_code == 416:
-                # ⚠️ 影片比 1.5MB 小（短片）→ 要求 1.5MB 之後會回 416，這不是失敗。
-                #    改抓開頭一小段確認真的給檔就好。
-                _r2 = _c.get(url, headers={"Range": "bytes=0-100000"})
-                return _r2.status_code in (200, 206) and len(_r2.content) > 0
-            return False
+                _r = _c.get(url, headers={**_h, "Range": "bytes=0-1023"})
+            return _r.status_code in (200, 206) and len(_r.content) > 0
     except Exception:
         return False
 
@@ -2087,7 +2089,8 @@ async def video_info(url: str):
                 if not _inf:
                     print(f"[youtube/{_name}] 沒有回傳資料")
                     continue
-                if _yt_probe_ok(_yt_pick_probe_url(_inf.get("formats") or [])):
+                if _yt_probe_ok(_yt_pick_probe_url(_inf.get("formats") or []),
+                                _YT_WARP_PROXY if _yt_use_warp else ""):
                     _YT_STATE["last_ok"] = _name
                     print(f"[youtube] OK 身分={_name}（試抓 1.5MB 之後成功）")
                     return _inf
