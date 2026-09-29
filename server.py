@@ -873,8 +873,8 @@ async def _get_douyin_fast(url: str) -> dict:
             ck.close()
             opts = {"quiet":True,"no_warnings":True,"skip_download":True,
                     "cookiefile":ck.name,
-                    "extractor_args":{"douyin":{"headers":{"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}}},
-                    "http_headers":{"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}}
+                    "extractor_args":{"douyin":{"headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}}},
+                    "http_headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"}}
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
@@ -1024,187 +1024,196 @@ async def _pick_fastest_url(urls: list[str], headers: dict | None = None, timeou
     print(f"[cdn_pick] best={best[1][:80]}  latency={best[0]:.2f}s")
     return best[1]
 
-async def _get_douyin_cdn(video_url: str) -> dict:
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        return {}
+_DY_BROWSER: dict = {"pw": None, "browser": None, "ctx": None}
+_DY_LOCK: "asyncio.Lock | None" = None
 
+
+async def _douyin_browser_context():
+    """抖音專用的**常駐**瀏覽器 context（比照轉運站 app/services/browser.py）。
+
+    ⚠️ 2026-09-29（小羅：「抖音跟西瓜都不能用，去參考轉運站的邏輯」）：
+      v8i8 每次都開一個全新的 context → 沒有 cookies → 抖音會：
+        ① 給你「推薦影片」（標題／封面都是別人的）
+        ② 根本不發 `aweme/v1/web/aweme/detail` → 攔不到資料 → 解析失敗
+      轉運站能成功就是靠這兩點：
+        ① **常駐 context**（cookies 留著，第二次更快、也不容易被判定為機器人）
+        ② `channel="chromium"`（新版無頭模式；預設的 headless shell 會被抖音判為機器人）
+    """
+    global _DY_LOCK
+    if _DY_LOCK is None:
+        _DY_LOCK = asyncio.Lock()
+    async with _DY_LOCK:
+        ctx = _DY_BROWSER.get("ctx")
+        if ctx is not None:
+            return ctx
+        from playwright.async_api import async_playwright
+        _args = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                 "--disable-blink-features=AutomationControlled",
+                 "--disable-background-timer-throttling",
+                 "--disable-renderer-backgrounding"]
+        pw = await async_playwright().start()
+        try:
+            browser = await pw.chromium.launch(headless=True, channel="chromium", args=_args)
+        except Exception:
+            browser = await pw.chromium.launch(headless=True, args=_args)
+        ctx = await browser.new_context(
+            locale="zh-CN", timezone_id="Asia/Shanghai",
+            viewport={"width": 1440, "height": 900},
+            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"))
+        await ctx.add_init_script(
+            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+            "Object.defineProperty(navigator,'languages',{get:()=>['zh-CN','zh','en']});")
+        _DY_BROWSER.update({"pw": pw, "browser": browser, "ctx": ctx})
+        print("[douyin_browser] 常駐 context 已建立")
+        return ctx
+
+
+async def _get_douyin_cdn(video_url: str) -> dict:
+    """真瀏覽器開抖音頁面，**攔 `aweme/v1/web/aweme/detail` 的回應**（比照轉運站的成功經驗）。
+
+    ⚠️ 2026-09-29（小羅：「抖音跟西瓜都不能用，去參考轉運站的邏輯」）：
+      抖音現在不給 SSR 資料、官方 API 要簽章、yt-dlp 要新鮮 cookies → 都會失敗。
+      唯一穩的是：**讓真瀏覽器自己開頁面**（它會自己帶正確 cookies／簽章去打 API），
+      我們只要「聽」那個回應（轉運站就是靠這招，抖音＋西瓜 4 條連結全成功）。
+      舊版三個致命問題（本版已修）：
+        ① 每次開全新 context（沒 cookies）→ 抖音給推薦影片、不發 API
+        ② 只等 `domcontentloaded`（抖音腳本極重）→ 常常還沒攔到就被關掉
+        ③ 沒驗證「攔到的是不是我們要的那一支」→ 會拿到**別人的影片**
+    """
     result = {"title": "抖音影片", "thumbnail": "", "duration": 0,
               "uploader": "", "cdn_url": None, "cdn_audio_url": None, "formats": []}
+    aweme_id = _parse_aweme_id(video_url)
 
-    CDN_DOMAINS = ("zjcdn.com", "douyinvod.com", "v26-efforg", "pull-f5",
-                   "toutiaoimg.com/obj/tos", "v19-efforg", "v3-efforg",
-                   "bytedance.com/obj", "p3-sign", "aweme.snssdk", "douyinvod.com")
-    COVER_PATTERNS = ("tos-cn-p", "tos-cn-i", "tos-cn-avt", "douyinpic.com",
-                      "p3-sign.douyinpic", "p6-sign", "p9-sign")
+    def _h_label(h: int) -> str:
+        if h >= 2160: return "4K"
+        if h >= 1440: return "2K"
+        if h >= 1080: return "1080P"
+        if h >= 720:  return "720P HD"
+        if h >= 540:  return "540P"
+        if h >= 480:  return "480P"
+        return f"{h}P" if h else "360P"
 
+    def _nowm(u: str) -> str:
+        return u.replace("/playwm/", "/play/").replace("playwm", "play")
+
+    page = None
     try:
-        async with async_playwright() as p:
-            browser = await _pw_browser(p)
-            ctx = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 800})
-            await _apply_cookies(ctx, video_url)
-            page = await ctx.new_page()
-            await _stealth(page)
+        ctx = await _douyin_browser_context()
+        await _apply_cookies(ctx, video_url)
+        page = await ctx.new_page()
+        await _stealth(page)
+        holder: dict = {}
 
-            found = asyncio.Event()
-            api_found = asyncio.Event()
-            cdn_url: list[str] = []
-            cdn_audio_url: list[str] = []
-            cover_url: list[str] = []
-            api_done: list[bool] = []
-
-            async def on_response(resp):
-                rurl = resp.url
-                ct = resp.headers.get("content-type", "")
-
-                if "aweme/v1/web/aweme/detail" in rurl and not api_done:
-                    api_done.append(True)
-                    try:
-                        body = await resp.json()
-                        aweme = body.get("aweme_detail") or {}
-                        if aweme:
-                            for field in ("play_addr", "download_addr"):
-                                try:
-                                    all_urls = aweme["video"][field]["url_list"]
-                                    if all_urls:
-                                        cdn_url.clear()
-                                        cdn_url.append(all_urls[0])
-                                        found.set()
-                                        break
-                                except Exception:
-                                    pass
-
-                            _lbl_order = {"360P":1,"480P":2,"540P":3,"720P HD":4,"1080P":5,"2K":6,"4K":7}
-                            _best: dict = {}
-                            try:
-                                for _br in aweme.get("video", {}).get("bit_rate", []):
-                                    _br_urls = _br.get("play_addr", {}).get("url_list", [])
-                                    if not _br_urls: continue
-                                    _qt  = _br.get("quality_type", 0)
-                                    _bps = _br.get("bitrate", 0)
-                                    _h   = _br.get("play_addr", {}).get("height", 0) or 0
-                                    if _h >= 2160:   _lbl = "4K"
-                                    elif _h >= 1440: _lbl = "2K"
-                                    elif _h >= 1080: _lbl = "1080P"
-                                    elif _h >= 720:  _lbl = "720P HD"
-                                    elif _h >= 540:  _lbl = "540P"
-                                    elif _h >= 480:  _lbl = "480P"
-                                    elif _h > 0:     _lbl = f"{_h}P"
-                                    else:
-                                        _qt_map = {0:"360P",1:"480P",2:"540P",3:"720P HD",4:"1080P",5:"2K",6:"4K"}
-                                        _lbl = _qt_map.get(_qt) or (
-                                            "1080P" if _bps > 3_000_000 else
-                                            "720P HD" if _bps > 1_500_000 else
-                                            "540P"  if _bps > 1_000_000 else
-                                            "480P"  if _bps > 700_000 else "360P")
-                                    if _lbl not in _best or _bps > _best[_lbl]["bitrate"]:
-                                        _best[_lbl] = {"id": str(_qt), "label": _lbl,
-                                                       "url": _br_urls[0], "bitrate": _bps}
-                            except Exception as _ex:
-                                print(f"[douyin_cdn] bit_rate parse: {_ex}")
-                            if _best:
-                                result["formats"] = sorted(_best.values(),
-                                    key=lambda x: _lbl_order.get(x["label"], 0))
-
-                            dur_ms = int(aweme.get("duration", 0) or 0)
-                            result["duration"] = dur_ms // 1000 if dur_ms > 1000 else dur_ms
-                            if aweme.get("desc"): result["title"] = aweme["desc"][:80]
-                            try: result["uploader"] = aweme["author"]["nickname"] or ""
-                            except Exception: pass
-                            try: result["thumbnail"] = aweme["video"]["cover"]["url_list"][0] or ""
-                            except Exception: pass
-
-                    except Exception as ex:
-                        print(f"[douyin_cdn] API 攔截失敗（將 fallback）: {ex}")
-                    finally:
-                        api_found.set()
-                    return
-
-                if "douyinstatic.com" in rurl: return
-                is_cdn = ("video" in ct or "audio" in ct) or any(d in rurl for d in CDN_DOMAINS)
-                if not is_cdn: return
-
-                is_audio = ("audio" in ct) or any(k in rurl for k in ("audio", "mp4a", "aac-", "m4a-", "media-audio"))
-                if is_audio:
-                    if not cdn_audio_url:
-                        cdn_audio_url.append(rurl)
-                else:
-                    if not api_done and not cdn_url:
-                        cdn_url.append(rurl)
-                        found.set()
-                if not cover_url and any(pat in rurl for pat in COVER_PATTERNS):
-                    if "image" in ct or rurl.endswith((".jpg", ".jpeg", ".webp", ".png")):
-                        cover_url.append(rurl)
-
-            page.on("response", on_response)
-            await page.add_init_script(
-                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
-                "window.chrome={runtime:{}};"
-                "window.outerWidth=1280;window.outerHeight=800;")
-
-            await page.goto(video_url, wait_until="domcontentloaded", timeout=45000)
-            await page.wait_for_timeout(2000)
+        async def on_response(resp):
+            if "aweme/v1/web/aweme/detail" not in resp.url or holder.get("detail"):
+                return
             try:
-                await page.evaluate("document.querySelector('video')?.play()")
+                body = await resp.json()
             except Exception:
-                pass
+                return
+            aweme = (body or {}).get("aweme_detail") or {}
+            if aweme:
+                holder["detail"] = aweme
 
-            try:
-                await asyncio.wait_for(found.wait(), timeout=25)
-            except asyncio.TimeoutError:
-                pass
+        page.on("response", on_response)
+        try:
+            # `commit`：導覽一送出就回來（不等 domcontentloaded，抖音腳本很重）
+            await page.goto(video_url, wait_until="commit", timeout=15000)
+        except Exception:
+            pass
 
-            try:
-                await page.evaluate("document.querySelector('video')?.play()")
-            except Exception:
-                pass
-
-            if not api_found.is_set():
+        for _i in range(50):                       # 最多等 20 秒
+            if holder.get("detail"):
+                break
+            await asyncio.sleep(0.4)
+            if _i == 3:                            # 有時候要「點一下播放」才會打 API
                 try:
-                    await asyncio.wait_for(api_found.wait(), timeout=6)
-                except asyncio.TimeoutError:
-                    pass
-
-            await page.wait_for_timeout(3000)
-
-            if not result["title"] or result["title"] == "抖音影片":
-                try:
-                    result["title"] = (await page.evaluate(
-                        "document.querySelector('meta[property=\"og:title\"]')?.content"
-                        "||document.querySelector('h1')?.textContent||document.title||'抖音影片'"
-                    ) or "抖音影片").replace("- 抖音", "").strip()
+                    await page.evaluate("() => { document.querySelector('video')?.play?.(); }")
                 except Exception:
                     pass
-            if not result["thumbnail"]:
-                try:
-                    result["thumbnail"] = await page.evaluate("""
-                        document.querySelector('meta[property="og:image"]')?.content
-                        || document.querySelector('meta[name="twitter:image"]')?.content
-                        || document.querySelector('meta[itemprop="image"]')?.content
-                        || document.querySelector('video')?.poster
-                        || ''
-                    """) or ""
-                except Exception:
-                    pass
-                if not result["thumbnail"] and cover_url:
-                    result["thumbnail"] = cover_url[0]
 
-            await browser.close()
+        detail = holder.get("detail") or {}
+        if detail:
+            # ⚠️ 一定要確認是「我們要的那一支」（否則會拿到推薦影片）
+            got_id = str(detail.get("aweme_id") or detail.get("awemeId") or "")
+            if aweme_id and got_id and got_id != aweme_id:
+                print(f"[douyin_cdn] 攔到別支（{got_id} != {aweme_id}）→ 丟棄")
+                detail = {}
 
-            if cdn_url:
-                result["cdn_url"] = cdn_url[0]
-            if cdn_audio_url:
-                result["cdn_audio_url"] = cdn_audio_url[0]
+        if detail:
+            video = detail.get("video") or {}
+            result["title"] = (detail.get("desc") or "").strip()[:80] or "抖音影片"
+            result["uploader"] = (detail.get("author") or {}).get("nickname") or ""
+            _dur = int(detail.get("duration") or 0)
+            result["duration"] = _dur // 1000 if _dur > 1000 else _dur
+            for _k in ("origin_cover", "cover", "dynamic_cover"):
+                _urls = (video.get(_k) or {}).get("url_list") or []
+                if _urls:
+                    result["thumbnail"] = _urls[0]
+                    break
+
+            # 多畫質：bit_rate[] 依高度分組，每個高度只留最高碼率那一個
+            buckets: dict = {}
+            for _br in video.get("bit_rate") or []:
+                _addr = (_br.get("play_addr") or {}).get("url_list") or []
+                if not _addr:
+                    continue
+                _h = int(_br.get("height") or 0)
+                _bps = int(_br.get("bit_rate") or 0)
+                if not _h:
+                    _nums = [int(x) for x in re.findall(r"\d+", _br.get("gear_name") or "")]
+                    _cand = [n for n in _nums if 240 <= n <= 4320]
+                    _h = _cand[0] if _cand else 0
+                if not _h:
+                    continue
+                _prev = buckets.get(_h)
+                if _prev is None or _bps > _prev[0]:
+                    buckets[_h] = (_bps, _br)
+
+            _fmts: list = []
+            for _h in sorted(buckets, reverse=True):
+                _url = ((buckets[_h][1].get("play_addr") or {}).get("url_list") or [""])[0]
+                if not _url:
+                    continue
+                _fmts.append({"id": f"v{_h}", "label": _h_label(_h),
+                              "url": _nowm(_url), "height": _h})
+            if not _fmts:
+                _urls = ((video.get("play_addr") or {}).get("url_list")
+                         or (video.get("download_addr") or {}).get("url_list") or [])
+                if _urls:
+                    _fmts.append({"id": "best", "label": "最高畫質",
+                                  "url": _nowm(_urls[0]), "height": 0})
+            result["formats"] = _fmts
+            if _fmts:
+                result["cdn_url"] = _fmts[0]["url"]
+
+        if not result["thumbnail"] or not result["title"] or result["title"] == "抖音影片":
+            # 備援：頁面上的 og: 標籤（至少讓使用者看到封面／標題）
+            try:
+                _og = await page.evaluate("""() => ({
+                    t: document.querySelector('meta[property="og:title"]')?.content
+                       || document.querySelector('h1')?.textContent || document.title || '',
+                    i: document.querySelector('meta[property="og:image"]')?.content
+                       || document.querySelector('meta[name="twitter:image"]')?.content
+                       || document.querySelector('video')?.poster || ''
+                })""") or {}
+                if _og.get("t") and (not result["title"] or result["title"] == "抖音影片"):
+                    result["title"] = str(_og["t"]).replace("- 抖音", "").strip()[:80] or "抖音影片"
+                if _og.get("i") and not result["thumbnail"]:
+                    result["thumbnail"] = _og["i"]
+            except Exception:
+                pass
     except Exception as e:
         print(f"[douyin_cdn] 錯誤：{e}")
+    finally:
+        if page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
 
     return result
-
-
-
 
 
 async def _get_tiktok_via_tikwm(url: str) -> dict:
@@ -1492,35 +1501,37 @@ async def video_info(url: str):
             
             fast_task = asyncio.create_task(_get_douyin_fast(real_url))
             cdn_task = asyncio.create_task(_get_douyin_cdn(real_url))
-            done, pending = await asyncio.wait(
-                [fast_task, cdn_task],
-                return_when=asyncio.FIRST_COMPLETED,
-                timeout=22
-            )
+            # ⚠️ 2026-09-29 修（比照轉運站）：抖音真正會成功的是「瀏覽器攔 API」那條，
+            #    它要 15～40 秒；舊版只給 5 秒就砍掉 → 使用者看到「沒封面、下載說解析失敗」。
+            #    改成：先等「有拿到 cdn_url」的那一條（最多 45 秒），
+            #    都沒拿到就退而求其次拿「有封面／標題」的那一份（至少畫面是對的）。
             results = {}
-            for t in done:
-                try:
-                    r = t.result()
-                    if r and r.get("cdn_url"):
-                        results = r
-                        for p in pending:
-                            p.cancel()
-                        break
-                except:
-                    pass
-            if not results.get("cdn_url"):
-                for t in pending:
-                    t.cancel()
-                # 等還沒完成的任務
-                for t in [fast_task, cdn_task]:
+            fallback: dict = {}
+            for _tick in range(90):                     # 90 × 0.5s = 45 秒
+                for _t in (fast_task, cdn_task):
+                    if not _t.done():
+                        continue
                     try:
-                        r = await asyncio.wait_for(t, timeout=5)
-                        if r and r.get("cdn_url"):
-                            results = r
-                            break
-                    except:
-                        pass
-            return results
+                        _r = _t.result()
+                    except Exception:
+                        continue
+                    if not isinstance(_r, dict):
+                        continue
+                    if _r.get("cdn_url"):
+                        results = _r
+                        break
+                    if _r.get("thumbnail") or (_r.get("title") and _r.get("title") != "抖音影片"):
+                        if not fallback.get("thumbnail"):
+                            fallback = _r
+                if results:
+                    break
+                if fast_task.done() and cdn_task.done():
+                    break
+                await asyncio.sleep(0.5)
+            for _t in (fast_task, cdn_task):
+                if not _t.done():
+                    _t.cancel()
+            return results or fallback
         
         cdn_info = await _fast_or_fallback()
         cdn = cdn_info.get("cdn_url") or ""
@@ -2671,6 +2682,11 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
         _fmt = f"bestvideo[height<={_hv}][ext=mp4]+bestaudio[ext=m4a]/best[height<={_hv}][ext=mp4]/best[height<={_hv}]"
     else:
         _fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+        # ⚠️ 2026-09-29 修（小羅：「下載時說解析失敗」的真兇）：
+        #    下面這段用到 `safe`，但 `safe` 只在上面「各平台自己的分支」裡才會被賦值
+        #    → 抖音／西瓜解析失敗（沒帶 cdn_url）掉到這裡 = UnboundLocalError
+        #    → 前端只看到錯誤訊息，就是使用者說的「解析失敗」。
+        safe = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
     opts = {"format": _fmt,
             "outtmpl":str(out_dir/f"{safe}.%(ext)s"),"quiet":True,"no_warnings":True,
             "merge_output_format":"mp4","concurrent_fragment_downloads":8,
