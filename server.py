@@ -29,6 +29,64 @@ _YT_OPTS_EXTRA = {
     "fragment_retries": 10,
 }
 
+def _ig_context(page: str):
+    """從 IG embed 頁面取出 `contextJSON` 並解析成 dict。
+
+    比照轉運站（app/platforms/instagram.py 的 _extract_context）：
+      IG 已改版，影片資料不再直接出現在 `video_url`，而是整包塞在 `contextJSON`
+      （JS 字串裡包著 JSON，長度可達 2 萬字、內含引號與跳脫）→ 不能用 regex。
+      作法：① 從 `"contextJSON":"` 開始，逐字元掃到未轉義的結尾引號
+            ② 還原 `\\"` → `"`
+            ③ 用括號配對（略過字串內的括號）框出完整 JSON 後 parse
+    """
+    key = '"contextJSON":"'
+    i = page.find(key)
+    if i < 0:
+        return None
+    i += len(key)
+    out, esc = [], False
+    while i < len(page):
+        c = page[i]
+        if esc:
+            out.append(c)
+            esc = False
+        elif c == "\\":
+            out.append(c)
+            esc = True
+        elif c == '"':
+            break
+        else:
+            out.append(c)
+        i += 1
+
+    text = "".join(out).replace('\\"', '"').replace("\\\\", "\\")
+    depth, start, in_str, esc2 = 0, -1, False, False
+    for j, ch in enumerate(text):
+        if in_str:
+            if esc2:
+                esc2 = False
+            elif ch == "\\":
+                esc2 = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = j
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    import json as _json
+                    return _json.loads(text[start:j + 1])
+                except Exception:
+                    return None
+    return None
+
+
 COOKIES_FILE      = BASE_DIR / "platform_cookies.json"
 DOWNLOAD_REGISTRY = DOWNLOAD_DIR / ".download_registry.json"
 _reg_lock         = threading.Lock()
@@ -1549,17 +1607,35 @@ async def video_info(url: str):
                             if _igr.status_code != 200:
                                 continue
                             _igh = _igr.text
+                            _icdn = ""
+                            # ① 舊方法：頁面直接有 video_url（舊版 IG 才這樣）
                             _ii = _igh.find('video_url')
-                            if _ii < 0:
+                            if _ii >= 0:
+                                _iseg = _igh[_ii:_ii + 3000].replace('\\', '')
+                                _iu = re.search(r'https://[^"\'<>\s]+', _iseg)
+                                if _iu:
+                                    _icdn = _iu.group(0)
+                            # ② 新方法（2026-09-29 比照轉運站）：IG 現在把資料塞在 contextJSON
+                            #    → 解析後從 gql_data.shortcode_media 取 video_url／video_versions
+                            _ism = {}
+                            if not _icdn:
+                                _ictx = _ig_context(_igh)
+                                if isinstance(_ictx, dict):
+                                    _ism = ((_ictx.get("gql_data") or {}).get("shortcode_media")) or {}
+                                    _icdn = (_ism.get("video_url") or "") or next(
+                                        (v.get("url") for v in (_ism.get("video_versions") or [])
+                                         if isinstance(v, dict) and v.get("url")), "")
+                                    # ⚠️ contextJSON 出來的網址還帶著 JS 的 \/ 轉義 → 要還原
+                                    #    （轉運站也是在這裡做同樣處理：\/ → /、&amp; → &）
+                                    _icdn = _icdn.replace("\/", "/").replace("&amp;", "&")
+                            if not _icdn:
                                 continue
-                            _iseg = _igh[_ii:_ii + 3000].replace('\\', '')
-                            _iu = re.search(r'https://[^"\'<>\s]+', _iseg)
-                            if not _iu:
-                                continue
-                            _icdn = _iu.group(0)
                             _ititle = ""
+                            if _ism:
+                                _cap = (((_ism.get("edge_media_to_caption") or {}).get("edges") or [{}])[0] or {}).get("node") or {}
+                                _ititle = (_ism.get("title") or _cap.get("text") or "").strip()[:140]
                             _it = re.search(r'"title"\s*:\s*"([^"]{1,150})"', _igh.replace('\\', ''))
-                            if _it:
+                            if not _ititle and _it:
                                 _ititle = _it.group(1)
                             _ithumb = ""
                             _ip = _igh.find('display_url')
@@ -2471,9 +2547,30 @@ async def _dl_progress(real_url: str, title: str, out_dir: Path,
             yield {"type":"error","message":"Facebook 下載失敗："+(err_fb[0] if err_fb else "未知錯誤")}
         return
 
-    # ══ Instagram：用 yt-dlp 下載（仿 FB 邏輯）════════════════════
+    # ══ Instagram：先用「解析拿到的 CDN 網址」伺服器轉發，失敗才退回 yt-dlp ══
+    #   ⚠️ 2026-09-29 修（比照轉運站的成功經驗）：
+    #      原本直接叫 yt-dlp 從 IG 頁面下載 → IG 要登入/cookies → 一定失敗
+    #      → 症狀就是「IG 能解析、不能下載」。解析時其實已經拿到 CDN 網址（embed 方式），
+    #      直接用 httpx 帶著 IG 的 Referer 轉發就好（跟「通用快速路徑」同一套做法）。
     _IS_IG = "instagram.com" in real_url
     if _IS_IG:
+        if hint_cdn:
+            yield {"type":"progress","pct":5,"msg":"下載 Instagram 影片（伺服器轉發）..."}
+            _safe_igf = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
+            _ig_h = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                "Referer": "https://www.instagram.com/",
+            }
+            _final_ig = out_dir / f"{_safe_igf}.mp4"
+            try:
+                async for evt in httpx_dl(hint_cdn, _final_ig, _ig_h, 5, 95): yield evt
+            except Exception as _ige0:
+                print(f"[instagram_relay] {_ige0}")
+            if _final_ig.exists() and _final_ig.stat().st_size > 50000:
+                yield {"type":"done","filename":_final_ig.name,"saved_dir":str(out_dir),
+                       "size_mb":round(_final_ig.stat().st_size/1024/1024,1)}
+                return
+            yield {"type":"progress","pct":3,"msg":"轉發失敗，改用 yt-dlp 重新下載..."}
         yield {"type":"progress","pct":5,"msg":"正在下載 Instagram 影片..."}
         safe_ig = re.sub(r'[\\/:*?"<>|]', '_', title)[:60]
         opts_ig = {"format":"best[ext=mp4]/best","outtmpl":str(out_dir/f"{safe_ig}.%(ext)s"),

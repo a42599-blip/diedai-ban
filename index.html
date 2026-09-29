@@ -904,7 +904,11 @@ async function dlUrl(){
   }
   const _isXHS=(urlInfo.url||'').includes('xiaohongshu.com')||(urlInfo.url||'').includes('xhslink.com');
   const _isBili=(urlInfo.url||'').includes('bilibili.com')||(urlInfo.url||'').includes('b23.tv');
-  if(isMobile() && cdnUrl && !cdnAudioUrl && !_isXHS && !_isBili){
+  // ⚠️ 2026-09-29 修（比照轉運站的成功經驗）：YouTube 不要走手機的「直接轉發」路線。
+  //    googlevideo 的網址直接抓會被 CDN 擋（403）→ 手機 YouTube「完全不能下載」。
+  //    讓它走跟電腦版一樣的伺服器下載（SSE → 伺服器用 yt-dlp 抓下來再給手機存）。
+  const _isYT=(urlInfo.url||'').includes('youtube.com')||(urlInfo.url||'').includes('youtu.be');
+  if(isMobile() && cdnUrl && !cdnAudioUrl && !_isXHS && !_isBili && !_isYT){
     const origin=(()=>{ try{ return new URL(urlInfo.url).origin; }catch(e){ return ''; } })();
     const q=new URLSearchParams({url:cdnUrl,title:urlInfo.title||'影片',referer:origin});
     const fname=(urlInfo.title||'影片').replace(/[/:*?"<>|]/g,'_').slice(0,60)+'.mp4';
