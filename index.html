@@ -1007,14 +1007,20 @@ loadDls();
       s2.appendChild(inv);
       adBar.appendChild(s2);
     }
-    // 3) 載入 HilltopAds 右側廣告
+    // 3) 載入 Adsterra Native Banner（右側方框，只桌機）
+    //    小羅 2026-10-02：換掉 HilltopAds 300x250 → 改用 v8i8 專屬的 Adsterra Native Banner（曝光 45% CPM）
+    //    ⚠️ Adsterra 每站 1 顆 Native Banner；此單元 key = 08843d9a5d157bd658be2adeae810c22（v8i8）
     var adRight = document.getElementById('adRight');
-    if(adRight && !adRight.querySelector('script[src*="massivesalad"]')){
-      var s = document.createElement('script');
-      s.src = "\/\/massivesalad.com\/beX_Vpshd.GPlF0NYxW_c_\/yeim\/9buCZhUtlmkNPkTuc\/xKNeD\/ME3zNMz\/cntONhzFET0RMzzPc\/4nMZQI";
-      s.async = true;
-      s.referrerPolicy = 'no-referrer-when-downgrade';
-      adRight.appendChild(s);
+    var _nbId = 'container-08843d9a5d157bd658be2adeae810c22';
+    if(adRight && !document.getElementById(_nbId)){
+      var _nb = document.createElement('div');
+      _nb.id = _nbId;
+      adRight.appendChild(_nb);
+      var _nbS = document.createElement('script');
+      _nbS.async = true;
+      _nbS.setAttribute('data-cfasync', 'false');
+      _nbS.src = 'https://pl31605529.profitableratecpmnetwork.com/08843d9a5d157bd658be2adeae810c22/invoke.js';
+      adRight.appendChild(_nbS);
     }
     // 4) 切換 active 狀態
     var s1 = document.getElementById('adSlot1');
