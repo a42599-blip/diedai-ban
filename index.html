@@ -169,10 +169,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 @media(min-width:1200px){.ad-left{display:none}} /* 等 Google 過了再打開 */
 
 /* ══ 廣告列（底部固定）══ */
-.ad-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,13,12,.96);border-top:1px solid #0d2420;padding:4px 8px;display:flex;justify-content:center;align-items:center;gap:4px;backdrop-filter:blur(8px);min-height:50px;overflow:hidden !important}
-.ad-slot{flex:1;max-width:320px;display:none;justify-content:center;align-items:center;min-height:50px;overflow:hidden !important}
-.ad-slot.active{display:flex}
-@media(min-width:768px){.ad-bar{gap:8px;padding:4px 16px}.ad-slot{max-width:340px}.ad-slot.active{max-width:740px}}
+.ad-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,13,12,.96);border-top:1px solid #0d2420;padding:4px 8px;display:block;backdrop-filter:blur(8px);min-height:50px;text-align:center}
+@media(min-width:768px){.ad-bar{padding:4px 16px}}
 .toast.err{background:#dc2626}
 @keyframes fi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
@@ -367,15 +365,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 </div>
 
 <!-- ══ 廣告列（底部固定）══ -->
+<!-- 小羅 2026-10-02：底部改成 AdSense（換掉 Adsterra）；手機＋電腦共用同一顆 -->
 <div class="ad-bar" id="adBar">
-  <!-- Slot 1: 手機版 320x50 Adsterra（使用跨域 iframe 隔離，防止自動跳轉） -->
-  <div class="ad-slot active" id="adSlot1" style="overflow:hidden;max-height:60px">
-    <iframe src="/api/ad-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation"
-      style="width:320px;height:50px;border:none;overflow:hidden;display:block">
-    </iframe>
-  </div>
-  <!-- Slot 2: 桌機版 728x90（由 JS 動態建立） -->
+  <!-- v8i8.com-底部固定 -->
+  <ins class="adsbygoogle" style="display:block;width:100%" data-ad-client="ca-pub-5481871045347242" data-ad-slot="5168315123" data-ad-format="auto" data-full-width-responsive="true"></ins>
+  <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
 </div>
+<script>
+/* 底部廣告會自己長高 → 量高度補 body 下內距，不蓋到內容（小羅 2026-10-02）*/
+(function(){var b=document.getElementById('adBar');if(!b)return;var f=function(){document.body.style.paddingBottom=Math.ceil(b.getBoundingClientRect().height)+'px';};f();window.addEventListener('resize',f);setTimeout(f,1500);setTimeout(f,3000);})();
+</script>
 
 <!-- ══ 資訊彈窗容器（內容由 JS 填入） ══ -->
 <div id="info-about" class="info-modal hide" onclick="if(event.target===this)hideInfo('about')">
@@ -992,21 +991,7 @@ loadDls();
       rm.content = 'no-referrer-when-downgrade';
       document.head.appendChild(rm);
     }
-    // 2) 建立 Slot 2（Adsterra 728x90）
-    var adBar = document.getElementById('adBar');
-    if(adBar && !document.getElementById('adSlot2')){
-      var s2 = document.createElement('div');
-      s2.className = 'ad-slot';
-      s2.id = 'adSlot2';
-      var opts = document.createElement('script');
-      opts.text = 'atOptions = {"key":"842fc373beace08461a5cd987dd3c51d","format":"iframe","height":90,"width":728,"params":{}}';
-      var inv = document.createElement('script');
-      inv.src = 'https://www.highperformanceformat.com/842fc373beace08461a5cd987dd3c51d/invoke.js';
-      inv.async = true;
-      s2.appendChild(opts);
-      s2.appendChild(inv);
-      adBar.appendChild(s2);
-    }
+    // 2) 右側方框已於下方處理（底部已改用 AdSense，不再建立 Adsterra 728x90）
     // 3) 載入 Adsterra Native Banner（右側方框，只桌機）
     //    小羅 2026-10-02：換掉 HilltopAds 300x250 → 改用 v8i8 專屬的 Adsterra Native Banner（曝光 45% CPM）
     //    ⚠️ Adsterra 每站 1 顆 Native Banner；此單元 key = 08843d9a5d157bd658be2adeae810c22（v8i8）
@@ -1022,11 +1007,6 @@ loadDls();
       _nbS.src = 'https://pl31605529.profitableratecpmnetwork.com/08843d9a5d157bd658be2adeae810c22/invoke.js';
       adRight.appendChild(_nbS);
     }
-    // 4) 切換 active 狀態
-    var s1 = document.getElementById('adSlot1');
-    var s2 = document.getElementById('adSlot2');
-    if(s1) s1.classList.remove('active');
-    if(s2) s2.classList.add('active');
   }
   initDesktop();
   window.addEventListener('resize',initDesktop);
