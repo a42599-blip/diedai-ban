@@ -169,9 +169,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 @media(min-width:1200px){.ad-left{display:none}} /* 等 Google 過了再打開 */
 
 /* ══ 廣告列（底部固定）══ */
-.ad-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,13,12,.96);border-top:1px solid #0d2420;padding:4px 8px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);max-height:76px;overflow:hidden !important}
-.ad-inwrap{width:100%;max-width:728px;max-height:68px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-@media(min-width:768px){.ad-bar{padding:4px 16px;max-height:110px}.ad-inwrap{max-height:102px}}
+.ad-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(5,13,12,.96);border-top:1px solid #0d2420;overflow:hidden !important}
+.ad-bar::before{content:'';display:block;height:64px}
+.ad-inwrap{position:absolute;left:0;right:0;bottom:0;height:64px;overflow:hidden}
+@media(min-width:768px){.ad-bar::before{height:106px}.ad-inwrap{height:106px}}
 .toast.err{background:#dc2626}
 @keyframes fi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
