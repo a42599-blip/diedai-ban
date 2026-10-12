@@ -1612,6 +1612,11 @@ def info_page(page: str):
 def sitemap_xml():
     return FileResponse(str(BASE_DIR / "sitemap.xml"), media_type="application/xml")
 
+@app.get("/lang-nav.js")
+def lang_nav_js():
+    """說明頁共用的選單語系腳本（小羅 2026-10-12）。"""
+    return FileResponse(str(BASE_DIR / "lang-nav.js"), media_type="application/javascript; charset=utf-8")
+
 @app.api_route("/robots.txt", methods=["GET", "HEAD"])
 def robots_txt():
     return FileResponse(str(BASE_DIR / "robots.txt"), media_type="text/plain")
