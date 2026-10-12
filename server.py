@@ -9,7 +9,7 @@ except Exception:
     async def _stealth(page): pass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import FastAPI, Request, UploadFile, File, Form
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -1595,6 +1595,26 @@ def ads_txt():
     return FileResponse(str(BASE_DIR / "ads.txt"),
                         media_type="text/plain",
                         headers={"Cache-Control": "no-store"})
+
+# ── 說明頁（真實可爬取的頁面；AdSense 政策要求）────────────────────
+_INFO_PAGES = {"privacy", "about", "disclaimer", "contact", "guide"}
+
+@app.get("/{page}.html")
+def info_page(page: str):
+    """隱私權政策／關於我們／免責聲明／聯絡我們／使用說明（獨立頁面，非彈窗）。"""
+    if page not in _INFO_PAGES:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(str(BASE_DIR / f"{page}.html"),
+                        media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    return FileResponse(str(BASE_DIR / "sitemap.xml"), media_type="application/xml")
+
+@app.api_route("/robots.txt", methods=["GET", "HEAD"])
+def robots_txt():
+    return FileResponse(str(BASE_DIR / "robots.txt"), media_type="text/plain")
 
 @app.get("/")
 def index():
