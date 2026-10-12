@@ -45,8 +45,8 @@ RUN playwright install chromium --with-deps
 
 # 複製應用程式
 COPY server.py .
-COPY index.html .
-COPY ads.txt .
+COPY ads.txt sitemap.xml robots.txt ./
+COPY *.html ./
 COPY crawlers/ ./crawlers/
 COPY start.sh .
 RUN mkdir -p 下載影片
